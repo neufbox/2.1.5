@@ -1,0 +1,24 @@
+diff --exclude=.svn linux-2.6.27.17/lib/Kconfig linux-2.6.27.17/lib/Kconfig
+--- linux-2.6.27.17/lib/Kconfig	2009-03-04 14:39:41.508393760 +0100
++++ linux-2.6.27.17/lib/Kconfig	2009-03-05 11:16:34.200607338 +0100
+@@ -85,6 +85,9 @@ config ZLIB_INFLATE
+ config ZLIB_DEFLATE
+ 	tristate
+ 
++config LZMA_DECOMPRESS
++	tristate
++
+ config LZO_COMPRESS
+ 	tristate
+ 
+diff --exclude=.svn -pNur linux-2.6.27.17/lib/Makefile linux-2.6.27.17/lib/Makefile
+--- linux-2.6.27.17/lib/Makefile	2009-03-05 11:16:50.436785739 +0100
++++ linux-2.6.27.17/lib/Makefile	2009-03-05 11:16:21.704133424 +0100
+@@ -60,6 +60,7 @@ obj-$(CONFIG_GENERIC_ALLOCATOR) += genal
+ obj-$(CONFIG_ZLIB_INFLATE) += zlib_inflate/
+ obj-$(CONFIG_ZLIB_DEFLATE) += zlib_deflate/
+ obj-$(CONFIG_REED_SOLOMON) += reed_solomon/
++obj-$(CONFIG_LZMA_DECOMPRESS) += lzma/
+ obj-$(CONFIG_LZO_COMPRESS) += lzo/
+ obj-$(CONFIG_LZO_DECOMPRESS) += lzo/
+ 

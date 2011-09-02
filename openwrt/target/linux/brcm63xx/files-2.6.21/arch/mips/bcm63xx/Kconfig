@@ -1,0 +1,220 @@
+# Kernel and Driver configuration for Broadcom Commengine ADSL board
+choice
+	prompt "Broadcom Commengine ADSL board"
+	depends on MIPS_BRCM
+	default BCM96348
+	help
+	  Select different Broadcom ADSL board
+
+config BCM96338
+	bool "96338 ADSL board"
+	select BCM63XX_CPU_6338
+	select DMA_NONCOHERENT
+
+config BCM96348
+	bool "96348 ADSL board"
+	select BCM63XX_CPU_6348
+	select DMA_NONCOHERENT
+
+config BCM96358
+	bool "96358 ADSL board"
+	select BCM63XX_CPU_6358
+	select DMA_NONCOHERENT
+
+config BCM96368
+	bool "96368 ADSL board"
+	select DMA_NONCOHERENT
+
+config BCM96816
+	bool "96816 ADSL board"
+	select DMA_NONCOHERENT
+
+endchoice
+
+config BCM_BOARD
+	bool "Support for Broadcom Board"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368 || BCM96816
+
+source "arch/mips/bcm63xx/boards/Kconfig"
+
+config BCM_PKTFLOW
+	tristate "Support for Broadcom Packet Flow Cache"
+	depends on BCM96368 || BCM96358 || BCM96348
+	help
+		Say 'M' to include support for Broadcom Packet Flow Cache.
+		Static compile not supported.
+
+config BCM_PKTCMF
+	tristate "Support for Packet CMF"
+	depends on BCM96368
+	help
+		Say 'M' to include support for Packet CMF.
+		Static compile not supported.
+
+config BCM_ENET
+	tristate "Support for Ethernet"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_GPON
+	tristate "Support for GPON"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_USB
+	tristate "Support for USB"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ISDN
+	tristate "Support for ISDN"
+	depends on BCM96358 || BCM96368
+
+config BCM_WLAN
+	tristate "Support for Wireless"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_PCI
+	bool "Support for PCI"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+	select PCI
+
+config BCM_ATMAPI
+	tristate "Support for ATM"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_XTMCFG
+	tristate "Support for XTM"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ATMTEST
+	tristate "Support for ATM Diagnostic"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ADSL
+	tristate "Support for ADSL"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ENDPOINT
+	tristate "Support for VOICE"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_BCMPROF
+	tristate "Support for profiling"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_BCMDSP
+	tristate "Support for DSP application"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_PROCFS
+	tristate "Support for PROCFS"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_SECURITY
+	tristate "Support for SECURITY"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_HPNA
+	tristate "Support for HPNA"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_P8021AG
+	tristate "Support for IEEE P8021.ag"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_SMUX
+	tristate "Implementation index for RFC2684 Services"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_BOARD_IMPL
+	int "Implementation index for ADSL Board"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368 || BCM96816
+
+config BCM_PKTFLOW_IMPL
+	int "Implementation index for Broadcom Flow Cache"
+	depends on BCM96368 || BCM96358 || BCM96348
+
+config BCM_PKTCMF_IMPL
+	int "Implementation index for Packet CMF"
+	depends on BCM96368
+
+config BCM_ENET_IMPL
+	int "Implementation index for Ethernet"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_GPON_IMPL
+	int "Implementation index for GPON"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_USB_IMPL
+	int "Implementation index for USB"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ISDN_IMPL
+	int "Implementation index for ISDN"
+	depends on BCM96358 || BCM96368
+
+config BCM_WLAN_IMPL
+	int "Implementation index for WIRELESS"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ATMAPI_IMPL
+	int "Implementation index for ATM"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_XTMCFG_IMPL
+	int "Implementation index for XTMCFG"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_XTMRT_IMPL
+  	int "Implementation index for XTMRT"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ATMTEST_IMPL
+	int "Implementation index for ATM Diagnostic"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_BLAA_IMPL
+	int "Implementation index for BLAA"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ADSL_IMPL
+	int "Implementation index for ADSL"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_ENDPOINT_IMPL
+	int "Implementation index for VOICE"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_BCMPROF_IMPL
+	int "Implementation index for DSP APPLICATION"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_BCMDSP_IMPL
+	int "Implementation index for PROFILING"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_PROCFS_IMPL
+	int "Implementation index for PROCFS"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_SECURITY_IMPL
+	int "Implementation index for SECURITY"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_HPNA_IMPL
+	int "Implementation index for HPNA"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+config BCM_P8021AG_IMPL
+	int "Implementation index for IEEE P8021AG"
+	depends on BCM96338 || BCM96348 || BCM96358 || BCM96368
+
+
+
+config BCM63XX_CPU_6338
+	bool
+
+config BCM63XX_CPU_6348
+	bool
+
+config BCM63XX_CPU_6358
+	bool

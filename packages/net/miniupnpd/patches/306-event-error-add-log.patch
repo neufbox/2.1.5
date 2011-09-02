@@ -1,0 +1,12 @@
+diff -pruN miniupnpd-1.3/upnpevents.c miniupnpd-1.3-mod/upnpevents.c
+--- miniupnpd-1.3/upnpevents.c	2009-04-10 10:58:30.000000000 +0200
++++ miniupnpd-1.3-mod/upnpevents.c	2009-06-10 14:41:35.642314007 +0200
+@@ -422,6 +422,8 @@ void upnpevents_processfds(fd_set *reads
+ 				obj->sub->notify = NULL;
+ 			/* remove also the subscriber from the list if there was an error */
+ 			if(obj->state == EError && obj->sub) {
++                                syslog(LOG_ERR, "%s: %p, remove subscriber '%p' after an ERROR",
++                                       "upnpevents_processfds", obj, obj->sub);
+ 				LIST_REMOVE(obj->sub, entries);
+ 				free(obj->sub);
+ 			}

@@ -1,0 +1,49 @@
+#!/bin/sh
+
+PIDFILE="/var/run/dsldiags.pid"
+
+LAN_IF=`nvram get lan_ifname`
+
+dsldiags_start () {
+	if [ ! -e "$PIDFILE" ] 
+	then
+		iptables -A INPUT -p udp -m udp -i $LAN_IF --dport 5099:5100 -m state --state NEW -j ACCEPT
+		dsldiags
+	fi
+}
+
+
+dsldiags_stop () {
+	if [ -e "$PIDFILE" ]
+	then
+		kill -KILL `cat "$PIDFILE"`
+		rm "$PIDFILE"
+		iptables -D INPUT -p udp -m udp -i $LAN_IF --dport 5099:5100 -m state --state NEW -j ACCEPT
+	fi
+}
+
+
+case "$1" in
+
+	start)
+		dsldiags_start
+		;;
+
+	stop)
+		dsldiags_stop
+		;;
+
+	restart|reload)
+		dsldiags_stop
+		dsldiags_start
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart|reload}"
+		exit 1
+		;;
+
+esac
+
+exit 0
+

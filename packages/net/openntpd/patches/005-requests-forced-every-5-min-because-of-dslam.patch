@@ -1,0 +1,14 @@
+diff -pruN openntpd-3.9p1.orig/ntpd.h openntpd-3.9p1/ntpd.h
+--- openntpd-3.9p1.orig/ntpd.h	2008-12-01 18:27:04.000000000 +0100
++++ openntpd-3.9p1/ntpd.h	2008-12-01 18:39:56.000000000 +0100
+@@ -41,8 +41,8 @@
+ #define	NTPD_OPT_VERBOSE	0x0001
+ #define	NTPD_OPT_VERBOSE2	0x0002
+ 
+-#define	INTERVAL_QUERY_NORMAL		30	/* sync to peers every n secs */
+-#define	INTERVAL_QUERY_PATHETIC		60
++#define	INTERVAL_QUERY_NORMAL		25	/* sync to peers every n secs */
++#define	INTERVAL_QUERY_PATHETIC		25
+ #define	INTERVAL_QUERY_AGRESSIVE	5
+ 
+ #define	TRUSTLEVEL_BADPEER		6

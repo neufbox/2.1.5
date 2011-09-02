@@ -1,0 +1,13 @@
+#!/bin/sh /etc/rc.common
+
+NET_INFRA=`status get net_infra`
+if [ "$NET_INFRA" = "adsl" ]; then
+    LAN_IFNAME=`nvram get net_adsl_lan_ifname`
+else    
+    LAN_IFNAME=`nvram get net_ftth_lan_ifname`
+fi
+
+boot() {
+    logger "Launch discovery (SSDP spy) ..."
+    discovery -D -i $LAN_IFNAME
+}

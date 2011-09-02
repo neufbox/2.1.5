@@ -1,0 +1,195 @@
+# syslog socket
+slink	/dev/log	/var/log/log 777 0 0
+
+# terminal
+nod	/dev/ptyp0	666 0 0 c 2 0
+nod	/dev/ptyp1	666 0 0 c 2 1
+nod	/dev/ptyp2	666 0 0 c 2 2
+nod	/dev/ptyp3	666 0 0 c 2 3
+nod	/dev/ptyp4	666 0 0 c 2 4
+nod	/dev/ptyp5	666 0 0 c 2 5
+nod	/dev/ptyp6	666 0 0 c 2 6
+nod	/dev/ptyp7	666 0 0 c 2 7
+
+nod	/dev/ttyp0	666 0 0 c 3 0
+nod	/dev/ttyp1	666 0 0 c 3 1
+nod	/dev/ttyp2	666 0 0 c 3 2
+nod	/dev/ttyp3	666 0 0 c 3 3
+nod	/dev/ttyp4	666 0 0 c 3 4
+nod	/dev/ttyp5	666 0 0 c 3 5
+nod	/dev/ttyp6	666 0 0 c 3 6
+nod	/dev/ttyp7	666 0 0 c 3 7
+
+nod	/dev/tty0	666 0 0 c 4 0
+nod	/dev/tty1	666 0 0 c 4 1
+nod	/dev/tty2	666 0 0 c 4 2
+nod	/dev/tty3	666 0 0 c 4 3
+nod	/dev/tty4	666 0 0 c 4 4
+nod	/dev/tty5	666 0 0 c 4 5
+nod	/dev/tty6	666 0 0 c 4 6
+nod	/dev/tty7	666 0 0 c 4 7
+
+nod 	/dev/ttyS0	666 0 0 c 4 64
+nod 	/dev/ttyS1	666 0 0 c 4 65
+
+nod	/dev/ptmx	600 0 0 c 5 2
+
+# gprs (3g key)
+nod     /dev/ttyUSB0    666 0 0 c 188 0
+
+# flash devices
+nod	/dev/mtd0	600 0 0 c 90 0
+nod	/dev/mtd0ro	600 0 0 c 90 1
+nod	/dev/mtd1	600 0 0 c 90 2
+nod	/dev/mtd1ro	600 0 0 c 90 3
+nod	/dev/mtd2	600 0 0 c 90 4
+nod	/dev/mtd2ro	600 0 0 c 90 5
+nod	/dev/mtd3	600 0 0 c 90 6
+nod	/dev/mtd3ro	600 0 0 c 90 7
+nod	/dev/mtd4	600 0 0 c 90 8
+nod	/dev/mtd4ro	600 0 0 c 90 9
+nod	/dev/mtd5	600 0 0 c 90 10
+nod	/dev/mtd5ro	600 0 0 c 90 11
+nod	/dev/mtd6	600 0 0 c 90 12
+nod	/dev/mtd6ro	600 0 0 c 90 13
+nod	/dev/mtd7	600 0 0 c 90 14
+nod	/dev/mtd7ro	600 0 0 c 90 15
+nod	/dev/mtdblock0	600 0 0 b 31 0
+nod	/dev/mtdblock1	600 0 0 b 31 1
+nod	/dev/mtdblock2	600 0 0 b 31 2
+nod	/dev/mtdblock3	600 0 0 b 31 3
+nod	/dev/mtdblock4	600 0 0 b 31 4
+nod	/dev/mtdblock5	600 0 0 b 31 5
+nod	/dev/mtdblock6	600 0 0 b 31 6
+nod	/dev/mtdblock7	600 0 0 b 31 7
+
+# neufbox devices
+nod	/dev/leds	    666 0 0 c 10 132
+nod	/dev/watchdog	    600 0 0 c 10 130
+nod	/dev/events	    666 0 0 c 10 222
+nod	/dev/voiceSubSys0   666 0 0 c 210 0
+
+# rings log devices
+nod	/dev/ring0	666 0 0 c 229 0
+nod	/dev/ring1	666 0 0 c 229 1
+nod	/dev/ring2	666 0 0 c 229 2
+nod	/dev/ring3	666 0 0 c 229 3
+nod	/dev/ring4	666 0 0 c 229 4
+nod	/dev/ring5	666 0 0 c 229 5
+nod	/dev/ring6	666 0 0 c 229 6
+nod	/dev/ring7	666 0 0 c 229 7
+nod	/dev/ring8	666 0 0 c 229 8
+nod	/dev/ring9	666 0 0 c 229 9
+nod	/dev/ring10	666 0 0 c 229 10
+nod	/dev/ring11	666 0 0 c 229 11
+
+# gpioctl
+nod	/dev/gpio	666 0 0 c 232 0
+
+# hotpsot
+nod	/dev/tun	600 0 0 c 10 200
+nod	/dev/tun1	600 0 0 c 10 201
+nod	/dev/tun2	600 0 0 c 10 202
+slink	/dev/tun0	/dev/tun 777 0 0
+dir	/dev/net	755 0 0
+slink	/dev/net/tun	/dev/tun 777 0 0
+slink	/dev/net/tun0	/dev/tun 777 0 0
+
+# scsi device
+nod	/dev/sda	660 0 0 b 8 0
+nod	/dev/sda1	660 0 0 b 8 1
+nod	/dev/sda2	660 0 0 b 8 2
+nod	/dev/sda3	660 0 0 b 8 3
+nod	/dev/sda4	660 0 0 b 8 4
+nod	/dev/sda5	660 0 0 b 8 5
+nod	/dev/sda6	660 0 0 b 8 6
+nod	/dev/sda7	660 0 0 b 8 7
+nod	/dev/sda8	660 0 0 b 8 8
+nod	/dev/sda9	660 0 0 b 8 9
+nod	/dev/sda10	660 0 0 b 8 10
+nod	/dev/sda11	660 0 0 b 8 11
+nod	/dev/sda12	660 0 0 b 8 12
+nod	/dev/sda13	660 0 0 b 8 13
+nod	/dev/sda14	660 0 0 b 8 14
+nod	/dev/sda15	660 0 0 b 8 15
+# ...
+nod	/dev/sdb	660 0 0 b 8 16
+nod	/dev/sdb1	660 0 0 b 8 17
+nod	/dev/sdb2	660 0 0 b 8 18
+nod	/dev/sdb3	660 0 0 b 8 19
+nod	/dev/sdb4	660 0 0 b 8 20
+nod	/dev/sdb5	660 0 0 b 8 21
+nod	/dev/sdb6	660 0 0 b 8 22
+nod	/dev/sdb7	660 0 0 b 8 23
+nod	/dev/sdb8	660 0 0 b 8 24
+nod	/dev/sdb9	660 0 0 b 8 25
+nod	/dev/sdb10	660 0 0 b 8 26
+nod	/dev/sdb11	660 0 0 b 8 27
+nod	/dev/sdb12	660 0 0 b 8 28
+nod	/dev/sdb13	660 0 0 b 8 29
+nod	/dev/sdb14	660 0 0 b 8 30
+nod	/dev/sdb15	660 0 0 b 8 31
+
+
+# usb printer
+dir	/dev/usb	755 0 0
+nod	/dev/usb/lp0	644 0 0 c 180 0
+nod	/dev/usb/lp1	644 0 0 c 180 1
+nod	/dev/usb/lp2	644 0 0 c 180 2
+nod	/dev/usb/lp3	644 0 0 c 180 3
+# webui access inklevel
+nod	/dev/printer0	666 0 0 c 180 0
+
+
+# NEUFBOX4 SPECIFIC DEVICES
+
+# mtd symbolic links
+slink	/dev/mtd-bootloader	/dev/mtd0 777 0 0
+slink	/dev/mtdblock-bootloader /dev/mtdblock0 777 0 0
+slink	/dev/mtd-main		/dev/mtd1 777 0 0
+slink	/dev/mtdblock-main	/dev/mtdblock1 777 0 0
+slink	/dev/mtd-config		/dev/mtd2 777 0 0
+slink	/dev/mtdblock-config	/dev/mtdblock2 777 0 0
+slink	/dev/mtd-rescue		/dev/mtd3 777 0 0
+slink	/dev/mtdblock-rescue	/dev/mtdblock3 777 0 0
+slink	/dev/mtd-dsldriver	/dev/mtd4 777 0 0
+slink	/dev/mtdblock-dsldriver	/dev/mtdblock4 777 0 0
+slink   /dev/mtd-bootcfg	/dev/mtd5 777 0 0
+slink   /dev/mtdblock-bootcfg	/dev/mtdblock5 777 0 0
+slink   /dev/mtd-flash          /dev/mtd7 777 0 0
+slink   /dev/mtdblock-flash     /dev/mtdblock7 777 0 0
+
+# Broadcom specific devices
+nod	/dev/bcmatm0	666 0 0 c 205 0
+nod	/dev/brcmboard	666 0 0 c 206 0
+nod	/dev/bcmvdsl0	640 0 0 c 207 0
+nod	/dev/bcmadsl0	666 0 0 c 208 0
+nod	/dev/bcmendpoint0 640 0 0 c 209 0
+nod	/dev/bcmaal20	640 0 0 c 210 0
+nod	/dev/bcmles0	640 0 0 c 211 0
+nod	/dev/bcm	640 0 0 c 212 0
+nod	/dev/ac97	640 0 0 c 222 0
+nod	/dev/slac	640 0 0 c 223 0
+nod	/dev/bcmprof	640 0 0 c 224 0
+nod	/dev/si3215	640 0 0 c 225 0
+nod	/dev/bcmatmb0	666 0 0 c 226 0
+nod	/dev/p8021ag0	666 0 0 c 227 0
+nod	/dev/bcmxtmcfg0 666 0 0 c 228 0
+
+# HID 
+nod   /dev/usb/hiddev0	666 0 0 c 180 96
+nod   /dev/usb/hiddev1	666 0 0 c 180 97
+nod   /dev/usb/hiddev2	666 0 0 c 180 98
+nod   /dev/usb/hiddev3	666 0 0 c 180 99
+nod   /dev/usb/hiddev4	666 0 0 c 180 100
+nod   /dev/usb/hiddev5	666 0 0 c 180 101
+nod   /dev/usb/hiddev6	666 0 0 c 180 102
+
+# PPP
+nod	/dev/ppp	644 0 0 c 108 0
+
+# FIFO
+pipe	/dev/initctl	644 0 0
+
+# shared memory device 
+dir	/dev/shm	777 0 0

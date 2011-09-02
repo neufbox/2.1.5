@@ -1,0 +1,480 @@
+diff -pNur linux-2.6.21.7/arch/mips/kernel/Makefile linux-2.6.21.7/arch/mips/kernel/Makefile
+--- linux-2.6.21.7/arch/mips/kernel/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/kernel/Makefile	2008-06-25 18:34:00.000000000 +0200
+@@ -4,9 +4,20 @@
+ 
+ extra-y		:= head.o init_task.o vmlinux.lds
+ 
++# CONFIG_MIPS_BRCM Begin Broadcom added code.
++
+ obj-y		+= cpu-probe.o branch.o entry.o genex.o irq.o process.o \
+ 		   ptrace.o reset.o semaphore.o setup.o signal.o syscall.o \
+ 		   time.o topology.o traps.o unaligned.o
++		   
++# CONFIG_MIPS_BRCM End Broadcom added code.
++
++# CONFIG_MIPS_BRCM Begin Broadcom added code.
++# gcc 3.4.x reorders code with -Os and -O2, breaking the save_static stuff.
++CFLAGS_syscall.o		:= -O1
++CFLAGS_signal.o			:= -O1
++CFLAGS_signal32.o		:= -O1
++# CONFIG_MIPS_BRCM End Broadcom added code.
+ 
+ binfmt_irix-objs	:= irixelf.o irixinv.o irixioctl.o irixsig.o	\
+ 			   irix5sys.o sysirix.o
+diff -pNur linux-2.6.21.7/arch/mips/kernel/setup.c linux-2.6.21.7/arch/mips/kernel/setup.c
+--- linux-2.6.21.7/arch/mips/kernel/setup.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/kernel/setup.c	2008-06-25 18:34:00.000000000 +0200
+@@ -64,7 +64,11 @@ static char command_line[CL_SIZE];
+  * mips_io_port_base is the begin of the address space to which x86 style
+  * I/O ports are mapped.
+  */
+-const unsigned long mips_io_port_base __read_mostly = -1;
++
++#if defined(CONFIG_MIPS_BRCM)
++const unsigned long mips_io_port_base __read_mostly = KSEG1;
++#endif
++
+ EXPORT_SYMBOL(mips_io_port_base);
+ 
+ /*
+diff -pNur linux-2.6.21.7/arch/mips/kernel/traps.c linux-2.6.21.7/arch/mips/kernel/traps.c
+--- linux-2.6.21.7/arch/mips/kernel/traps.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/kernel/traps.c	2008-06-25 18:34:00.000000000 +0200
+@@ -312,6 +312,13 @@ void show_registers(struct pt_regs *regs
+ 
+ static DEFINE_SPINLOCK(die_lock);
+ 
++#if defined(CONFIG_MIPS_BRCM)
++#ifdef CONFIG_REMOTE_DEBUG
++#include <asm/gdb-stub.h>
++extern void handle_exception(struct gdb_regs *regs);
++#endif
++#endif
++
+ NORET_TYPE void ATTRIB_NORET die(const char * str, struct pt_regs * regs)
+ {
+ 	static int die_counter;
+@@ -327,6 +334,29 @@ NORET_TYPE void ATTRIB_NORET die(const c
+ #endif /* CONFIG_MIPS_MT_SMTC */
+ 	printk("%s[#%d]:\n", str, ++die_counter);
+ 	show_registers(regs);
++#if defined(CONFIG_MIPS_BRCM)
++#ifdef CONFIG_REMOTE_DEBUG
++        {
++                struct gdb_regs regs2;
++                int i;
++                long *ptr;
++
++                ptr = &regs2.reg0;
++                /* Copy registers to GDB structure */
++                for(i=0; i<32;i++)
++                        *ptr++ = regs->regs[i];
++
++                regs2.lo = regs->lo;
++                regs2.hi = regs->hi;
++                regs2.cp0_epc = regs->cp0_epc;
++                regs2.cp0_badvaddr = regs->cp0_badvaddr;
++                regs2.cp0_status = regs->cp0_status;
++                regs2.cp0_cause = regs->cp0_cause;
++
++                handle_exception(&regs2); /* Break to GDB */
++        }
++#endif
++#endif
+ 	spin_unlock_irq(&die_lock);
+ 
+ 	if (in_interrupt())
+diff -pNur linux-2.6.21.7/arch/mips/Makefile linux-2.6.21.7/arch/mips/Makefile
+--- linux-2.6.21.7/arch/mips/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/Makefile	2008-06-25 18:34:00.000000000 +0200
+@@ -43,8 +43,14 @@ UTS_MACHINE		:= mips64
+ endif
+ 
+ ifdef CONFIG_CROSSCOMPILE
++# CONFIG_MIPS_BRCM Begin Broadcom added code.
++ifdef CONFIG_MIPS_BRCM
++#CROSS_COMPILE		:= $(tool-prefix)
++else
+ CROSS_COMPILE		:= $(tool-prefix)
+ endif
++# CONFIG_MIPS_BRCM End Broadcom added code.
++endif
+ 
+ ifdef CONFIG_32BIT
+ ld-emul			= $(32bit-emul)
+@@ -83,6 +89,11 @@ cflags-y			+= -msoft-float
+ LDFLAGS_vmlinux			+= -G 0 -static -n -nostdlib
+ MODFLAGS			+= -mlong-calls
+ 
++#if defined(CONFIG_MIPS_BRCM)
++ifeq ($(strip $(JTAG_KERNEL_DEBUG)),y)
++cflags-y			+= -g
++endif
++
+ cflags-y += -ffreestanding
+ 
+ #
+@@ -108,6 +119,13 @@ cflags-$(CONFIG_CPU_HAS_SMARTMIPS)	+= $(
+ cflags-$(CONFIG_SB1XXX_CORELIS)	+= $(call cc-option,-mno-sched-prolog) \
+ 				   -fno-omit-frame-pointer
+ 
++# CONFIG_MIPS_BRCM Begin Broadcom changed code.
++ifdef CONFIG_MIPS_BRCM 
++cflags-$(CONFIG_REMOTE_DEBUG)	+= -ggdb
++endif
++# CONFIG_MIPS_BRCM End Broadcom changed code.
++
++
+ #
+ # CPU-dependent compiler/assembler options for optimization.
+ #
+@@ -266,6 +284,16 @@ load-$(CONFIG_MIPS_MTX1)	+= 0xffffffff80
+ libs-$(CONFIG_MIPS_XXS1500)	+= arch/mips/au1000/xxs1500/
+ load-$(CONFIG_MIPS_XXS1500)	+= 0xffffffff80100000
+ 
++# CONFIG_MIPS_BRCM Begin Broadcom added code.
++ifdef CONFIG_MIPS_BRCM
++#
++# Broadcom board
++core-$(CONFIG_MIPS_BRCM)		+= arch/mips/bcm63xx/
++cflags-$(CONFIG_MIPS_BRCM)     	+= -Iinclude/asm-mips/mach-bcm63xx
++load-$(CONFIG_MIPS_BRCM)	    += 0x80010000
++endif
++# CONFIG_MIPS_BRCM End Broadcom added code.
++
+ #
+ # Cobalt Server
+ #
+diff -pNur linux-2.6.21.7/arch/mips/mm/c-r4k.c linux-2.6.21.7/arch/mips/mm/c-r4k.c
+--- linux-2.6.21.7/arch/mips/mm/c-r4k.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/mm/c-r4k.c	2008-06-25 18:34:01.000000000 +0200
+@@ -852,6 +852,11 @@ static void __init probe_pcache(void)
+ 		if (!(config & MIPS_CONF_M))
+ 			panic("Don't know how to probe P-caches on this cpu.");
+ 
++#if defined(CONFIG_MIPS_BRCM)
++		printk("brcm mips: enabling icache and dcache...\n");
++        	    /* Enable caches */
++        	    write_c0_diag(read_c0_diag() | 0xC0000000);
++#endif
+ 		/*
+ 		 * So we seem to be a MIPS32 or MIPS64 CPU
+ 		 * So let's probe the I-cache ...
+@@ -1163,6 +1168,12 @@ static void __init coherency_setup(void)
+ 	case CPU_R4400PC:
+ 	case CPU_R4400SC:
+ 	case CPU_R4400MC:
++#if defined(CONFIG_MIPS_BRCM)
++	case CPU_BCM6338:
++	case CPU_BCM6348:
++	case CPU_BCM6358:
++	case CPU_BCM6368:
++#endif
+ 		clear_c0_config(CONF_CU);
+ 		break;
+ 	/*
+diff -pNur linux-2.6.21.7/arch/mips/mm/init.c linux-2.6.21.7/arch/mips/mm/init.c
+--- linux-2.6.21.7/arch/mips/mm/init.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/mm/init.c	2008-06-25 18:34:01.000000000 +0200
+@@ -351,7 +351,7 @@ void __init paging_init(void)
+ #endif
+ 	kmap_coherent_init();
+ 
+-#ifdef CONFIG_ISA
++#if defined(CONFIG_MIPS_BRCM)
+ 	if (max_low_pfn >= MAX_DMA_PFN)
+ 		if (min_low_pfn >= MAX_DMA_PFN) {
+ 			zones_size[ZONE_DMA] = 0;
+diff -pNur linux-2.6.21.7/arch/mips/pci/Makefile linux-2.6.21.7/arch/mips/pci/Makefile
+--- linux-2.6.21.7/arch/mips/pci/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/pci/Makefile	2008-06-25 18:34:02.000000000 +0200
+@@ -17,6 +17,9 @@ obj-$(CONFIG_MIPS_TX3927)	+= ops-tx3927.
+ obj-$(CONFIG_PCI_VR41XX)	+= ops-vr41xx.o pci-vr41xx.o
+ obj-$(CONFIG_NEC_CMBVR4133)	+= fixup-vr4133.o
+ obj-$(CONFIG_MARKEINS)		+= ops-emma2rh.o pci-emma2rh.o fixup-emma2rh.o
++# CONFIG_MIPS_BRCM Begin Broadcom changed code
++obj-$(CONFIG_BCM_PCI)		+= fixup-bcm63xx.o pci-bcm63xx.o ops-bcm63xx.o
++# CONFIG_MIPS_BRCM End Broadcom changed code
+ 
+ #
+ # These are still pretty much in the old state, watch, go blind.
+@@ -53,3 +56,9 @@ obj-$(CONFIG_TOSHIBA_RBTX4938)	+= fixup-
+ obj-$(CONFIG_VICTOR_MPC30X)	+= fixup-mpc30x.o
+ obj-$(CONFIG_ZAO_CAPCELLA)	+= fixup-capcella.o
+ obj-$(CONFIG_WR_PPMC)		+= fixup-wrppmc.o
++
++# CONFIG_MIPS_BRCM Begin Broadcom changed code
++ifeq "$(CONFIG_BCM_PCI)" "y"
++EXTRA_CFLAGS += -I$(INC_BRCMDRIVER_PUB_PATH)/$(BRCM_BOARD) -I$(INC_BRCMSHARED_PUB_PATH)/$(BRCM_BOARD) -I$(TOPDIR)/include/asm-mips/mach-bcm63xx
++endif
++# CONFIG_MIPS_BRCM End Broadcom changed code
+diff -pNur linux-2.6.21.7/drivers/usb/host/Makefile linux-2.6.21.7/drivers/usb/host/Makefile
+--- linux-2.6.21.7/drivers/usb/host/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/drivers/usb/host/Makefile	2008-06-25 18:34:16.000000000 +0200
+@@ -16,3 +16,8 @@ obj-$(CONFIG_USB_SL811_HCD)	+= sl811-hcd
+ obj-$(CONFIG_USB_SL811_CS)	+= sl811_cs.o
+ obj-$(CONFIG_USB_U132_HCD)	+= u132-hcd.o
+ obj-$(CONFIG_ETRAX_ARCH_V10)	+= hc_crisv10.o
++
++# Features enabled by these flags have been removed, 48 support will come later
++# ifeq ($(CONFIG_BCM96348),y)
++# EXTRA_CFLAGS	+= -DCONFIG_SWAP_IO_SPACE -D__MIPSEB__
++# endif
+\ No newline at end of file
+diff -pNur linux-2.6.21.7/fs/proc/Makefile linux-2.6.21.7/fs/proc/Makefile
+--- linux-2.6.21.7/fs/proc/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/fs/proc/Makefile	2008-06-25 18:34:20.000000000 +0200
+@@ -8,7 +8,7 @@ proc-y			:= nommu.o task_nommu.o
+ proc-$(CONFIG_MMU)	:= mmu.o task_mmu.o
+ 
+ proc-y       += inode.o root.o base.o generic.o array.o \
+-		proc_tty.o proc_misc.o
++		kmsg.o proc_tty.o proc_misc.o proc_brcm.o
+ 
+ proc-$(CONFIG_PROC_SYSCTL)	+= proc_sysctl.o
+ proc-$(CONFIG_PROC_KCORE)	+= kcore.o
+diff -pNur linux-2.6.21.7/fs/proc/root.c linux-2.6.21.7/fs/proc/root.c
+--- linux-2.6.21.7/fs/proc/root.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/fs/proc/root.c	2008-06-25 18:34:20.000000000 +0200
+@@ -23,6 +23,11 @@
+ 
+ struct proc_dir_entry *proc_net, *proc_net_stat, *proc_bus, *proc_root_fs, *proc_root_driver;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++struct proc_dir_entry *proc_brcm;
++extern void proc_brcm_init(struct proc_dir_entry *pentry);
++#endif
++
+ static int proc_get_sb(struct file_system_type *fs_type,
+ 	int flags, const char *dev_name, void *data, struct vfsmount *mnt)
+ {
+@@ -79,6 +84,10 @@ void __init proc_root_init(void)
+ 	proc_device_tree_init();
+ #endif
+ 	proc_bus = proc_mkdir("bus", NULL);
++#if defined(CONFIG_MIPS_BRCM)
++	proc_brcm = proc_mkdir("brcm", NULL);
++	proc_brcm_init(proc_brcm);
++#endif
+ 	proc_sys_init();
+ }
+ 
+diff -pNur linux-2.6.21.7/include/asm-mips/bootinfo.h linux-2.6.21.7/include/asm-mips/bootinfo.h
+--- linux-2.6.21.7/include/asm-mips/bootinfo.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/asm-mips/bootinfo.h	2008-06-25 18:34:04.000000000 +0200
+@@ -213,6 +213,14 @@
+ #define MACH_GROUP_NEC_EMMA2RH 25	/* NEC EMMA2RH (was 23)		*/
+ #define  MACH_NEC_MARKEINS	0	/* NEC EMMA2RH Mark-eins	*/
+ 
++#if defined(CONFIG_MIPS_BRCM)
++/*
++ * Valid machtype for group BRCM
++ */
++#define MACH_GROUP_BRCM        23	/* Broadcom boards              */
++#define MACH_BCM963XX       0
++#endif
++
+ #define CL_SIZE			COMMAND_LINE_SIZE
+ 
+ const char *get_system_type(void);
+diff -pNur linux-2.6.21.7/include/asm-mips/fixmap.h linux-2.6.21.7/include/asm-mips/fixmap.h
+--- linux-2.6.21.7/include/asm-mips/fixmap.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/asm-mips/fixmap.h	2008-06-25 18:34:06.000000000 +0200
+@@ -77,11 +77,15 @@ extern void __set_fixmap (enum fixed_add
+  * the start of the fixmap, and leave one page empty
+  * at the top of mem..
+  */
++#if defined(CONFIG_MIPS_BRCM)
++#define FIXADDR_TOP	((unsigned long)(long)(int)0xff000000)
++#else
+ #if defined(CONFIG_CPU_TX39XX) || defined(CONFIG_CPU_TX49XX)
+ #define FIXADDR_TOP	((unsigned long)(long)(int)(0xff000000 - 0x20000))
+ #else
+ #define FIXADDR_TOP	((unsigned long)(long)(int)0xfffe0000)
+ #endif
++#endif
+ #define FIXADDR_SIZE	(__end_of_fixed_addresses << PAGE_SHIFT)
+ #define FIXADDR_START	(FIXADDR_TOP - FIXADDR_SIZE)
+ 
+diff -pNur linux-2.6.21.7/include/linux/fs.h linux-2.6.21.7/include/linux/fs.h
+--- linux-2.6.21.7/include/linux/fs.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/linux/fs.h	2008-06-25 18:34:11.000000000 +0200
+@@ -718,7 +718,13 @@ struct file {
+ 	struct path		f_path;
+ #define f_dentry	f_path.dentry
+ #define f_vfsmnt	f_path.mnt
++//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++// Temporarily remove const for sys monitor task
++#if 0
+ 	const struct file_operations	*f_op;
++#else
++	struct file_operations	*f_op;
++#endif
+ 	atomic_t		f_count;
+ 	unsigned int 		f_flags;
+ 	mode_t			f_mode;
+diff -pNur linux-2.6.21.7/init/main.c linux-2.6.21.7/init/main.c
+--- linux-2.6.21.7/init/main.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/init/main.c	2008-06-25 18:34:42.000000000 +0200
+@@ -117,6 +117,7 @@ EXPORT_SYMBOL(system_state);
+ #define MAX_INIT_ARGS CONFIG_INIT_ENV_ARG_LIMIT
+ #define MAX_INIT_ENVS CONFIG_INIT_ENV_ARG_LIMIT
+ 
++extern void __init allocDspModBuffers(void);
+ extern void time_init(void);
+ /* Default late time init is NULL. archs can override this later. */
+ void (*late_time_init)(void);
+@@ -600,6 +601,14 @@ asmlinkage void __init start_kernel(void
+ #endif
+ 	vfs_caches_init_early();
+ 	cpuset_init_early();
++#if defined(CONFIG_MIPS_BRCM)
++	/*
++	** Allocate boot time memory for the special DSP module. This allocation can be 
++	** possible only before mem_init(). Please ensure that this allocation is performed 
++	** before mem_init().
++	*/
++	allocDspModBuffers();
++#endif
+ 	mem_init();
+ 	kmem_cache_init();
+ 	setup_per_cpu_pageset();
+diff -pNur linux-2.6.21.7/kernel/module.c linux-2.6.21.7/kernel/module.c
+--- linux-2.6.21.7/kernel/module.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/kernel/module.c	2008-06-25 18:34:43.000000000 +0200
+@@ -58,6 +58,15 @@
+ /* If this is set, the section belongs in the init part of the module */
+ #define INIT_OFFSET_MASK (1UL << (BITS_PER_LONG-1))
+ 
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
++/*
++** These are pointers to memory chunks allocated for the DSP module. The memory is allocated in
++** start_kernel() during initialization. 
++*/
++extern void *dsp_core;
++extern void *dsp_init;
++#endif
++
+ /* Protects module list */
+ static DEFINE_SPINLOCK(modlist_lock);
+ 
+@@ -176,6 +185,7 @@ static unsigned long __find_symbol(const
+ {
+ 	struct module *mod;
+ 	const struct kernel_symbol *ks;
++	gplok = 1;
+ 
+ 	/* Core kernel first. */ 
+ 	*owner = NULL;
+@@ -676,6 +686,11 @@ sys_delete_module(const char __user *nam
+ 		goto out;
+ 	}
+ 
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
++    /* This check is not needed for the DSP module */
++    if ( strcmp(mod->name, "dspdd") != 0 )
++#endif
++    {
+ 	if (!list_empty(&mod->modules_which_use_me)) {
+ 		/* Other modules depend on us: get rid of them first. */
+ 		ret = -EWOULDBLOCK;
+@@ -713,6 +728,13 @@ sys_delete_module(const char __user *nam
+ 	/* Never wait if forced. */
+ 	if (!forced && module_refcount(mod) != 0)
+ 		wait_for_zero_refcount(mod);
++	}
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
++	else
++	{
++	    ret = 0;
++	}
++#endif
+ 
+ 	/* Final destruction now noone is using it. */
+ 	if (mod->exit != NULL) {
+@@ -1210,8 +1232,12 @@ static void free_module(struct module *m
+ 	/* Module unload stuff */
+ 	module_unload_free(mod);
+ 
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
+ 	/* This may be NULL, but that's OK */
+-	module_free(mod, mod->module_init);
++	if ( strcmp(mod->name, "dspdd") != 0 )
++#endif
++	    module_free(mod, mod->module_init);
++
+ 	kfree(mod->args);
+ 	if (mod->percpu)
+ 		percpu_modfree(mod->percpu);
+@@ -1219,8 +1245,11 @@ static void free_module(struct module *m
+ 	/* Free lock-classes: */
+ 	lockdep_free_key_range(mod->module_core, mod->core_size);
+ 
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
+ 	/* Finally, free the core (containing the module structure) */
+-	module_free(mod, mod->module_core);
++	if ( strcmp(mod->name, "dspdd") != 0 )
++#endif
++	    module_free(mod, mod->module_core);
+ }
+ 
+ void *__symbol_get(const char *symbol)
+@@ -1740,7 +1769,12 @@ static struct module *load_module(void _
+ 	layout_sections(mod, hdr, sechdrs, secstrings);
+ 
+ 	/* Do the allocs. */
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
++	ptr = (strcmp(mod->name, "dspdd") != 0) ? module_alloc(mod->core_size) : dsp_core; 
++#else
+ 	ptr = module_alloc(mod->core_size);
++#endif
++	      
+ 	if (!ptr) {
+ 		err = -ENOMEM;
+ 		goto free_percpu;
+@@ -1748,7 +1782,13 @@ static struct module *load_module(void _
+ 	memset(ptr, 0, mod->core_size);
+ 	mod->module_core = ptr;
+ 
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
++	ptr = (strcmp(mod->name, "dspdd") != 0) ? module_alloc(mod->init_size) : dsp_init; 
++#else	      
+ 	ptr = module_alloc(mod->init_size);
++#endif
++	      
++
+ 	if (!ptr && mod->init_size) {
+ 		err = -ENOMEM;
+ 		goto free_core;
+@@ -1942,8 +1982,17 @@ static struct module *load_module(void _
+ 	module_arch_cleanup(mod);
+  cleanup:
+ 	module_unload_free(mod);
++
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
++    /* Only if not the dsp module */
++    if ( strcmp(mod->name, "dspdd") != 0 )
++#endif
+ 	module_free(mod, mod->module_init);
+  free_core:
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
++    /* Only if not the dsp module */
++    if ( strcmp(mod->name, "dspdd") != 0 )
++#endif
+ 	module_free(mod, mod->module_core);
+  free_percpu:
+ 	if (percpu)
+@@ -2031,7 +2080,11 @@ sys_init_module(void __user *umod,
+ 	/* Drop initial reference. */
+ 	module_put(mod);
+ 	unwind_remove_table(mod->unwind_info, 1);
+-	module_free(mod, mod->module_init);
++#if defined(CONFIG_BCM96358) || defined(CONFIG_BCM96368)
++    /* Only if not the dsp module */
++	if ( strcmp(mod->name, "dspdd") != 0 )
++#endif
++	    module_free(mod, mod->module_init);
+ 	mod->module_init = NULL;
+ 	mod->init_size = 0;
+ 	mod->init_text_size = 0;

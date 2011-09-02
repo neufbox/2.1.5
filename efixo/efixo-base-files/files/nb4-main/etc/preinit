@@ -1,0 +1,89 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+mount proc /proc -t proc
+mount sysfs /sys -t sysfs
+
+mount tmpfs /tmp -t tmpfs -o size=10M,nosuid,nodev,mode=1777
+mount -t tmpfs tmpfs /dev -o size=512K
+mknod /dev/console c 5 1
+/sbin/hotplug2 --coldplug --set-rules-file /etc/hotplug2-init.rules
+/sbin/hotplug2 --no-coldplug --persistent --set-rules-file /etc/hotplug2-init.rules &
+M0=/dev/ptmx
+M1=/dev/ptmx
+HOTPLUG=
+
+mkdir -p /dev/pts /dev/shm
+mount devpts /dev/pts -t devpts
+
+# the shell really doesn't like having stdin/out closed
+# that's why we use /dev/pty/m0 and m1 as replacement
+# for /dev/console if there's no serial console available
+dd if=/dev/console of=/dev/null bs=1 count=0 >/dev/null 2>/dev/null && {
+	M0=/dev/console
+	M1=/dev/console
+}
+
+exec <$M0 >$M1 2>&0
+
+echo "- preinit -"
+echo "$HOTPLUG" > /proc/sys/kernel/hotplug
+
+# Create Broadcom specific devices
+mknod -m 666 /dev/bcmatm0 c 205 0
+mknod -m 666 /dev/brcmboard c 206 0
+chown 0.10 /dev/brcmboard
+mknod -m 640 /dev/bcmvdsl0 c 207 0
+mknod -m 666 /dev/bcmadsl0 c 208 0
+mknod -m 640 /dev/bcmendpoint0 c 209 0
+mknod -m 640 /dev/bcmaal20 c 210 0
+mknod -m 640 /dev/bcmles0 c 211 0
+mknod -m 640 /dev/bcm c 212 0
+mknod -m 640 /dev/ac97 c 222 0
+mknod -m 640 /dev/slac c 223 0
+mknod -m 640 /dev/bcmprof c 224 0
+mknod -m 640 /dev/si3215 c 225 0
+mknod -m 666 /dev/bcmatmb0 c 226 0
+mknod /dev/p8021ag0 c 227 0
+mknod -m 666 /dev/bcmxtmcfg0 c 228 0
+mknod /dev/voiceSubSys0 c 210 0
+
+# Create Efixo device
+ln -s /var/log/log $1/dev/log
+mknod /dev/ring0  c 229 0
+mknod /dev/ring1  c 229 1
+mknod /dev/ring2  c 229 2
+mknod /dev/ring3  c 229 3
+mknod /dev/ring4  c 229 4
+mknod /dev/ring5  c 229 5
+mknod /dev/ring6  c 229 6
+mknod /dev/ring7  c 229 7
+mknod /dev/ring8  c 229 8
+mknod /dev/ring9  c 229 9
+mknod /dev/ring10 c 229 10
+mknod /dev/ring11 c 229 11
+
+mknod /dev/gpio c 232 0
+
+# Symbolic links to avoid errors
+ln -sf /dev/mtd0 /dev/mtd-bootloader
+ln -sf /dev/mtdblock0 /dev/mtdblock-bootloader
+ln -sf /dev/mtd1 /dev/mtd-main
+ln -sf /dev/mtdblock1 /dev/mtdblock-main
+ln -sf /dev/mtd2 /dev/mtd-config
+ln -sf /dev/mtdblock2 /dev/mtdblock-config
+ln -sf /dev/mtd3 /dev/mtd-rescue
+ln -sf /dev/mtdblock3 /dev/mtdblock-rescue
+ln -sf /dev/mtd4 /dev/mtd-dsldriver
+ln -sf /dev/mtdblock4 /dev/mtdblock-adsl
+ln -sf /dev/mtd5 /dev/mtd-bootcfg
+ln -sf /dev/mtdblock5 /dev/mtdblock-bootcfg
+ln -sf /dev/mtd7 /dev/mtd-flash
+ln -sf /dev/mtdblock7 /dev/mtdblock-flash
+
+chmod u+s /bin/busybox
+
+echo "- init -"
+
+exec /sbin/init

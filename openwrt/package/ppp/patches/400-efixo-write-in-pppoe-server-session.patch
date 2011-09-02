@@ -1,0 +1,49 @@
+--- ppp-2.4.4.orig/pppd/plugins/rp-pppoe/discovery.c	2008-10-31 11:55:33.000000000 +0100
++++ ppp-2.4.4/pppd/plugins/rp-pppoe/discovery.c	2008-11-03 16:47:44.000000000 +0100
+@@ -35,6 +35,7 @@ static char const RCSID[] =
+ #endif
+ 
+ #include <signal.h>
++#include <stdio.h>
+ 
+ /**********************************************************************
+ *%FUNCTION: parseForHostUniq
+@@ -109,10 +110,17 @@ parsePADOTags(UINT16_t type, UINT16_t le
+     struct PacketCriteria *pc = (struct PacketCriteria *) extra;
+     PPPoEConnection *conn = pc->conn;
+     int i;
++    FILE *fp;
+ 
+     switch(type) {
+     case TAG_AC_NAME:
+ 	pc->seenACName = 1;
++	fp = fopen("/var/ppp/pppoe_server", "w");
++	if (fp)	{
++	    fprintf(fp, "%.*s\n", (int) len, data);
++	    fclose(fp);
++	}
++
+ 	if (conn->printACNames) {
+ 	    printf("Access-Concentrator: %.*s\n", (int) len, data);
+ 	}
+@@ -485,6 +493,7 @@ waitForPADS(PPPoEConnection *conn, int t
+     struct timeval tv;
+     PPPoEPacket packet;
+     int len;
++    FILE *fp;
+ 
+     do {
+ 	if (BPF_BUFFER_IS_EMPTY) {
+@@ -507,6 +516,12 @@ waitForPADS(PPPoEConnection *conn, int t
+ 	/* Get the packet */
+ 	receivePacket(conn->discoverySocket, &packet, &len);
+ 
++	fp = fopen("/var/ppp/pppoe_session", "w");
++	if (fp)	{
++	    fprintf(fp, "%d\n", packet.session);
++	    fclose(fp);
++	}
++
+ 	/* Check length */
+ 	if (ntohs(packet.length) + HDR_SIZE > len) {
+ 	    error("Bogus PPPoE length field (%u)", ntohs(packet.length));

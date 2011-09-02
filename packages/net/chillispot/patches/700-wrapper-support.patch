@@ -1,0 +1,84 @@
+diff -pruN openwrt/build_dir/target-mips_uClibc-0.9.29_nb4-main/chillispot-1.1.0.orig/src/chilli.c openwrt/build_dir/target-mips_uClibc-0.9.29_nb4-main/chillispot-1.1.0/src/chilli.c
+--- chillispot-1.1.0/src/chilli.c	2009-03-27 14:33:56.040974286 +0100
++++ chillispot-1.1.0/src/chilli.c	2009-03-27 14:57:58.309198538 +0100
+@@ -712,6 +712,14 @@ int static process_options(int argc, cha
+ 
+   /* Handle each option */
+ 
++  /* wrapper */
++  if (args_info.wrapper_flag) {
++    options.wrapper = 1;
++  }
++  else {
++    options.wrapper = 0;
++  }
++
+   /* debug                                                        */
+   if (args_info.debug_flag) {
+     options.debug = args_info.debugfacility_arg;
+@@ -5103,6 +5113,12 @@ sys_err(LOG_ERR, __FILE__, __LINE__, 0,
+     log_pid(options.pidfile);
+   }
+ 
++
++  /* Signal to the father */
++  if ( options.wrapper ) {
++  	  kill( getppid(), SIGHUP );
++  }
++
+   if (options.debug) 
+     printf("Waiting for client request...\n");
+ 
+diff -pruN openwrt/build_dir/target-mips_uClibc-0.9.29_nb4-main/chillispot-1.1.0.orig/src/chilli.h openwrt/build_dir/target-mips_uClibc-0.9.29_nb4-main/chillispot-1.1.0/src/chilli.h
+--- chillispot-1.1.0.orig/src/chilli.h	2009-03-27 14:33:56.021687983 +0100
++++ chillispot-1.1.0/src/chilli.h	2009-03-27 14:48:24.629432183 +0100
+@@ -224,6 +224,7 @@ struct app_conn_t {
+ /* Struct with local versions of gengetopt options */
+ struct options_t {
+   /* fg */
++  int wrapper;
+   int debug;
+   /* conf */
+   int interval;
+diff -pruN openwrt/build_dir/target-mips_uClibc-0.9.29_nb4-main/chillispot-1.1.0.orig/src/cmdline.c openwrt/build_dir/target-mips_uClibc-0.9.29_nb4-main/chillispot-1.1.0/src/cmdline.c
+--- chillispot-1.1.0.orig/src/cmdline.c	2009-03-27 14:33:56.021687983 +0100
++++ chillispot-1.1.0/src/cmdline.c	2009-03-27 14:59:44.453187953 +0100
+@@ -1344,6 +1344,7 @@ cmdline_parser_internal (int argc, char 
+       static struct option long_options[] = {
+         { "help",	0, NULL, 'h' },
+         { "version",	0, NULL, 'V' },
++        { "wrapper",   0, NULL, 'w' },
+         { "fg",	0, NULL, 'f' },
+         { "debug",	0, NULL, 'd' },
+         { "debugfacility",	1, NULL, 0 },
+@@ -1404,7 +1405,7 @@ cmdline_parser_internal (int argc, char 
+       };
+ 
+       stop_char = 0;
+-      c = getopt_long (argc, argv, "hVfdc:n:", long_options, &option_index);
++      c = getopt_long (argc, argv, "hVwfdc:n:", long_options, &option_index);
+ 
+       if (c == -1) break;	/* Exit from `while (1)' loop.  */
+ 
+@@ -1420,6 +1421,10 @@ cmdline_parser_internal (int argc, char 
+           cmdline_parser_free (&local_args_info);
+           exit (EXIT_SUCCESS);
+ 
++	case 'w':       /* Send a sighup to the father */
++	   args_info->wrapper_flag = 1;
++	   break;
++
+         case 'f':	/* Run in foreground.  */
+           if (local_args_info.fg_given)
+             {
+diff -pruN openwrt/build_dir/target-mips_uClibc-0.9.29_nb4-main/chillispot-1.1.0.orig/src/cmdline.h openwrt/build_dir/target-mips_uClibc-0.9.29_nb4-main/chillispot-1.1.0/src/cmdline.h
+--- chillispot-1.1.0.orig/src/cmdline.h	2009-03-27 14:33:56.021687983 +0100
++++ chillispot-1.1.0/src/cmdline.h	2009-03-27 14:50:45.988952792 +0100
+@@ -24,6 +24,7 @@ extern "C" {
+ 
+ struct gengetopt_args_info
+ {
++  int wrapper_flag;     /* Send a SIGHUP to the father after init */
+   int fg_flag;	/* Run in foreground (default=off).  */
+   int debug_flag;	/* Run in debug mode (default=off).  */
+   int debugfacility_arg;	/* Which modules to print debug messages for (default='1').  */

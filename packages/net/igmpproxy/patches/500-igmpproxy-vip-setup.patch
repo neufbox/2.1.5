@@ -1,0 +1,15 @@
+--- igmpproxy/src/igmpproxy.c	2005-08-20 14:56:32.000000000 +0200
++++ igmpproxy/src/igmpproxy.c	2008-11-13 14:25:12.000000000 +0100
+@@ -230,8 +230,10 @@ int igmpProxyInit() {
+                     }
+                 }
+ 
+-                addVIF( Dp );
+-                vifcount++;
++		if ( Dp->state != IF_STATE_DISABLED ) {
++			addVIF( Dp );
++			vifcount++;
++		}
+             }
+         }
+ 

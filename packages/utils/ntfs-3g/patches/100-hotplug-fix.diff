@@ -1,0 +1,42 @@
+diff -u -p ntfs-3g-1.2531.orig/libfuse-lite/helper.c ntfs-3g-1.2531/libfuse-lite/helper.c
+--- ntfs-3g-1.2531.orig/libfuse-lite/helper.c	10 Jun 2008 19:48:34 -0000	1.4
++++ ntfs-3g-1.2531/libfuse-lite/helper.c	10 Jul 2008 22:39:56 -0000
+@@ -160,16 +160,6 @@ static struct fuse_chan *fuse_mount_comm
+     struct fuse_chan *ch;
+     int fd;
+ 
+-    /*
+-     * Make sure file descriptors 0, 1 and 2 are open, otherwise chaos
+-     * would ensue.
+-     */
+-    do {
+-        fd = open("/dev/null", O_RDWR);
+-        if (fd > 2)
+-            close(fd);
+-    } while (fd >= 0 && fd <= 2);
+-
+     fd = fuse_kern_mount(mountpoint, args);
+     if (fd == -1)
+         return NULL;
+diff -u -p ntfs-3g-1.2531.orig/src/ntfs-3g.c ntfs-3g-1.2531/src/ntfs-3g.c
+--- ntfs-3g-1.2531.orig/src/ntfs-3g.c	2 Apr 2008 17:30:12 -0000	1.111
++++ ntfs-3g-1.2531/src/ntfs-3g.c	10 Jul 2008 22:39:57 -0000
+@@ -2231,7 +2231,17 @@ int main(int argc, char *argv[])
+ 	struct fuse *fh;
+ 	fuse_fstype fstype = FSTYPE_UNKNOWN;
+ 	struct stat sbuf;
+-	int err;
++	int err, fd;
++
++	/*
++	 * Make sure file descriptors 0, 1 and 2 are open, 
++	 * otherwise chaos would ensue.
++	 */
++	do {
++		fd = open("/dev/null", O_RDWR);
++		if (fd > 2)
++			close(fd);
++	} while (fd >= 0 && fd <= 2);
+ 
+ #ifndef FUSE_INTERNAL
+ 	if ((getuid() != geteuid()) || (getgid() != getegid())) {

@@ -1,0 +1,63 @@
+--- linux-2.6.21.7/drivers/net/bcmxtmrt.c	2009-04-09 11:38:08.889829942 +0200
++++ linux-2.6.21.7/drivers/net/bcmxtmrt.c	2009-04-09 11:40:15.021871838 +0200
+@@ -222,6 +222,44 @@ static inline void cache_wbflush_len(voi
+     }
+ }
+ 
++static int proc_net_xtm(char *page, char **start, off_t off, int cnt, int *eof, void *data)
++{
++	volatile unsigned long *xtm_base = (volatile unsigned long *)(0xfffe2000);
++	unsigned long txbytes = *(xtm_base + 0x440/sizeof(*xtm_base));
++	unsigned long rxbytes = *(xtm_base + 0x460/sizeof(*xtm_base));
++	char *p = page;
++	int len;
++	unsigned i;
++
++	*eof = 1;
++
++	len = sprintf(p, "== xtmrt tx queues ==\n");
++	p += len;
++	len = sprintf(p, "queue size use  free\n");
++	p += len;
++
++	for (i=0; i<8; ++i) {
++		u32 txq = *(xtm_base + 0x020/sizeof(*xtm_base) + i);
++		u16 head = ((txq >> 16U) & 0xFF);
++		u16 tail = ((txq >> 8U) & 0xFF);
++		u16 size = ((txq >> 0U) & 0xFF);
++		u16 use;
++
++		if (!size)
++			continue;
++
++		++size;
++		if (head < tail)
++			head += size;
++		use = head - tail;
++
++		len = sprintf(p, "% 3lu   % 4lu % 4lu % 4lu (head:%02u tail:%02u)\n",
++			      i, size, use, size - use, head % size, tail);
++		p += len;
++	}
++
++	return (p-page);
++}
+ 
+ /***************************************************************************
+  * Function Name: bcmxtmrt_init
+@@ -254,6 +292,7 @@ int __init bcmxtmrt_init( void )
+     g_GlobalInfo.ulNumExtBufs50Pct = g_GlobalInfo.ulNumExtBufs / 2;
+ 
+     bcmxtmrt_add_proc_files();
++    create_proc_read_entry("xtm", 0, proc_net, proc_net_xtm, 0);
+ 
+     return( 0 );
+ } /* bcmxtmrt_init */
+@@ -266,6 +305,7 @@ int __init bcmxtmrt_init( void )
+  ***************************************************************************/
+ static void bcmxtmrt_cleanup( void )
+ {
++    remove_proc_entry("xtm", proc_net);
+     bcmxtmrt_add_proc_files();
+     deregister_atm_ioctl(&g_PppoAtmIoctlOps);
+     if( g_GlobalInfo.pAtmDev )

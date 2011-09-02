@@ -1,0 +1,33 @@
+--- linux-2.6.21.7/net/ipv4/ipmr.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/ipv4/ipmr.c	2009-02-25 11:05:12.964128483 +0100
+@@ -631,6 +631,9 @@ ipmr_cache_unresolved(vifi_t vifi, struc
+ 	}
+ 
+ 	if (c == NULL) {
++		struct mfc_cache *_c;
++		unsigned long now;
++		unsigned long expires;
+ 		/*
+ 		 *	Create a new entry if allowable
+ 		 */
+@@ -664,11 +667,18 @@ ipmr_cache_unresolved(vifi_t vifi, struc
+ 			return err;
+ 		}
+ 
++		now = jiffies;
++		expires = 10*HZ;
++		for (_c=mfc_unres_queue; _c; _c=_c->next) {
++			unsigned long interval = _c->mfc_un.unres.expires - now;
++			expires = min(max(interval, 0UL), expires);
++		}
++
+ 		atomic_inc(&cache_resolve_queue_len);
+ 		c->next = mfc_unres_queue;
+ 		mfc_unres_queue = c;
+ 
+-		mod_timer(&ipmr_expire_timer, c->mfc_un.unres.expires);
++		mod_timer(&ipmr_expire_timer, jiffies + expires);
+ 	}
+ 
+ 	/*
+

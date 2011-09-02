@@ -1,0 +1,27 @@
+diff -pNur linux-2.6.21.7/include/asm-mips/futex.h linux-2.6.21.7/include/asm-mips/futex.h
+--- linux-2.6.21.7/include/asm-mips/futex.h	2008-11-12 09:46:00.000000000 +0100
++++ linux-2.6.21.7/include/asm-mips/futex.h	2008-12-17 17:08:15.768557192 +0100
+@@ -35,7 +35,7 @@
+ 		"	.set	mips0				\n"	\
+ 		"	.section .fixup,\"ax\"			\n"	\
+ 		"4:	li	%0, %6				\n"	\
+-		"	j	2b				\n"	\
++		"	j	3b				\n"	\
+ 		"	.previous				\n"	\
+ 		"	.section __ex_table,\"a\"		\n"	\
+ 		"	"__UA_ADDR "\t1b, 4b			\n"	\
+@@ -61,7 +61,7 @@
+ 		"	.set	mips0				\n"	\
+ 		"	.section .fixup,\"ax\"			\n"	\
+ 		"4:	li	%0, %6				\n"	\
+-		"	j	2b				\n"	\
++		"	j	3b				\n"	\
+ 		"	.previous				\n"	\
+ 		"	.section __ex_table,\"a\"		\n"	\
+ 		"	"__UA_ADDR "\t1b, 4b			\n"	\
+@@ -200,4 +200,4 @@ futex_atomic_cmpxchg_inatomic(int __user
+ }
+ 
+ #endif
+-#endif
++#endif /* _ASM_FUTEX_H */

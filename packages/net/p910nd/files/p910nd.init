@@ -1,0 +1,22 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2007 OpenWrt.org
+
+IPTABLES=iptables
+
+start() {
+	[ ! -d "/sys/class/usb/lp0" ] && exit 1
+	$IPTABLES -A LAN_FILTER -m tcp -p tcp -m state --state NEW --dport 9100 -j ACCEPT
+	if [ "`nvram get p910nd_bidir`" = "on" ]
+	then
+		p910nd -b -f /dev/usb/lp0 &
+	else
+		p910nd -f /dev/usb/lp0 &
+	fi
+	status set p910nd_status up
+}
+
+stop() {
+	$IPTABLES -D LAN_FILTER -m tcp -p tcp -m state --state NEW --dport 9100 -j ACCEPT
+	for f in `ls /var/run/p910*d.pid`; do kill `cat $f`; done;
+	status set p910nd_status down
+}

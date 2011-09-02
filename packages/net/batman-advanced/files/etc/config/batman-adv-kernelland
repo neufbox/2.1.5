@@ -1,0 +1,4 @@
+config batman-adv-kernelland general
+	option interface		ath0
+	option originator_interval
+	option log_level	

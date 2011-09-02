@@ -1,0 +1,249 @@
+#!/bin/sh
+RADVD_PID="/var/run/radvd.pid"
+XL2TPD_PID="/var/run/xl2tpd.pid"
+DHCP6_PID="/var/run/dhcp6c.pid"
+XL2TPD_CONF="/tmp/xl2tpd.conf"
+PPPOPT="/tmp/options.l2tpd.client" 
+LNS_IP="93.20.89.2"
+
+ipv6_start() {
+	logger -s -t $0 -p daemon.debug "Starting $NAME"
+	ip -6 route add dev ppp1
+}
+
+ipv6_stop () {
+	logger -s -t $0 -p daemon.debug "Stopping $NAME"
+
+}
+
+
+l2tp_purge_config () {
+	logger -s -t $0 -p daemon.debug "Remove $XL2TPD_CONF"
+	[ -e "$XL2TPD_CONF" ] && rm -f "$XL2TPD_CONF"
+}
+
+ppp_purge_config () {
+	logger -s -t $0 -p daemon.debug "Remove $PPPOPT"
+	[ -e "$PPPOPT" ] && rm -f "$PPPOPT"
+}
+
+dhcp6c_init () {
+	logger -s -t $0 daemon.debug "Init dhcp6c"
+	mkdir /var/db
+}
+
+dhcp6c_start () {
+	logger -s -t $0 daemon.debug "Start dhcp6c"
+	[ ! -e "$DHCP6_PID" ] && dhcp6c -c /etc/dhcp6c.conf ppp1 lan0
+}
+
+dhcp6c_stop () {
+	logger -s -t $0 daemon.debug "Start dhcp6c"
+	killall dhcp6c
+}
+
+radvd_start () {
+	logger -s -t $0 daemon.debug "Start radvd"
+	[ ! -e "RADVD_PID" ] && /usr/sbin/radvd -C /etc/radvd.conf -m logfile -l /var/log/radvd.log
+}
+
+radvd_stop () {
+	logger -s -t $0 daemon.debug "Stop radvd"
+	killall radvd
+}
+
+radvd_reload () {
+	logger -s -t $0 daemon.debug "Reload radvd"
+	kill -HUP `cat "$RADVD_PID"`
+}
+
+ppp6_start () {
+	logger -s -t $0 -p daemon.debug "Start ppp6"
+	echo "c L2TP" > /var/run/xl2tpd/l2tp-control
+}
+
+ppp6_stop () {
+	logger -s -t $0 -p daemon.debug "Stop ppp6"
+	echo "d L2TP" > /var/run/xl2tpd/l2tp-control
+}
+
+l2tp_init () {
+	logger -s -t $0 -p daemon.debug "Init xl2tpd"
+	[ ! -e "/var/run/xl2tpd" ] && mkdir -p /var/run/xl2tpd
+	chmod 777 /var/run/xl2tpd
+}
+
+l2tp_start () {
+	logger -s -t $0 -p daemon.debug "Start xl2tpd"
+	[ -e "$XL2TPD_CONF" ] && [ ! -e "XL2TPD_PID" ] && /usr/sbin/xl2tpd -c $XL2TPD_CONF
+	[ ! -e "$XL2TPD_CONF" ] && echo "No conf $XL2TPD_CONF..."
+
+}
+
+l2tp_stop () {
+	logger -s -t $0 -p daemon.debug "Stop xl2tpd"
+	killall xl2tpd
+
+}
+
+
+l2tp_gen_config () {
+	logger -s -t $0 -p daemon.debug "Gen $XL2TPD_CONF"
+
+	ip_ppp4=`status get ppp_ipaddr`
+	mac=`status get mac_addr`
+	name="ppp/$mac@$ip_ppp4"
+
+	echo "[global]
+;debug avp = yes 
+;debug network = yes 
+;debug state = yes 
+;debug tunnel = yes 
+port = 1701 
+access control = no 
+
+[lac L2TP] 
+name = $name
+lns = $LNS_IP
+;redial = yes 
+;redial timeout = 15 
+hidden bit = no 
+;ppp debug = yes 
+pppoptfile = $PPPOPT 
+;require authentication = no 
+;refuse authentication = yes 
+refuse chap = no 
+flow bit = yes 
+length bit = yes
+" > $XL2TPD_CONF 
+}
+
+ppp_gen_config () {
+	logger -s -t $0 -p daemon.debug "Gen $PPPOPT"
+
+	ip_ppp4=`status get ppp_ipaddr`
+	mac=`ifconfig nas_8_35 | grep HWaddr | awk -F' ' '{ print $NF }' | awk '{ print tolower($0) }'`
+	name="ppp/$mac@$ip_ppp4"
+
+	echo "user  $name
+unit 1
+noip
+noipdefault 
+noauth 
+lcp-echo-interval 20
+lcp-echo-failure 10
+defaultroute 
+noaccomp 
+ipv6 ,
++ipv6
+ipv6cp-use-persistent
+lock
+" > $PPPOPT
+
+	echo "$name      *       neufpnp" > /tmp/ppp/pap-secrets
+	echo "# Secrets for authentication using CHAP
+# client        server  secret                  IP addresses
+6pe    * 6pe *
+$name    * neufpnp *" > /tmp/ppp/chap-secrets
+
+}
+
+radvd_gen_config () {
+	echo "interface lan0
+{
+	AdvSendAdvert on;
+	AdvManagedFlag off;
+	AdvOtherConfigFlag off;
+	AdvHomeAgentFlag on;
+	AdvHomeAgentInfo on;
+	HomeAgentPreference 10;
+	AdvIntervalOpt on;
+	prefix ::/64
+	{
+		AdvOnLink on;
+		AdvAutonomous on;
+		AdvRouterAddr on;
+	};
+};" > /tmp/radvd.conf
+}
+
+dhcp6c_gen_config () {
+	echo "
+interface ppp1 {
+send ia-pd 0;
+};
+
+id-assoc pd {
+	prefix-interface lan0 {
+	sla-id 1;
+	sla-len 8;
+	};
+};" > /tmp/dhcp6c.conf
+}
+
+ipv6_init () {
+	l2tp_init
+	dhcp6c_init
+	logger -s -t $0 -p daemon.debug "Init $NAME"
+	echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
+	iptables -A INPUT -p 41 -j ACCEPT
+	ip route add $LNS_IP via $ppp_gateway 
+	touch /tmp/ipv6
+}
+
+ppp_status=`status get ppp_status`
+
+case "$1" in
+	init)
+	ipv6_init
+	;;
+	start)
+	[ ! -e "/tmp/ipv6" ] && ipv6_init
+	if [ "$ppp_status" = "up" ]
+	then
+		radvd_gen_config
+		dhcp6c_gen_config
+		l2tp_gen_config
+		ppp_gen_config          
+		l2tp_start
+		ppp6_start
+		sleep 5
+		dhcp6c_start
+		sleep 1
+		radvd_start
+		ipv6_start
+	else
+		echo "PPPv4 status is $ppp_status. Unable to launch ipv6"
+	fi
+	;;
+	stop)
+	ppp6_stop
+	radvd_stop
+	dhcp6c_stop
+	l2tp_stop
+	ipv6_stop
+	l2tp_purge_config
+	ppp_purge_config
+	;;
+	ppp_start)
+	ppp6_start
+	sleep 5
+	dhcp6c_start
+	radvd_reload
+	ipv6_start
+	;;
+	ppp_stop)
+	ppp6_stop
+	dhcp6c_stop
+	;;
+	ppp_restart)
+	ppp6_stop
+	ppp6_start
+	;;
+	*)
+	echo "Usage: $0 {start|stop|restart|reload}"
+	exit 1
+	;;
+esac
+exit 0
+

@@ -1,0 +1,455 @@
+diff -pNur linux-2.6.21.7/include/net/netfilter/nf_conntrack_ecache.h linux-2.6.21.7/include/net/netfilter/nf_conntrack_ecache.h
+--- linux-2.6.21.7/include/net/netfilter/nf_conntrack_ecache.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/net/netfilter/nf_conntrack_ecache.h	2008-10-14 14:24:45.000000000 +0200
+@@ -9,6 +9,9 @@
+ #include <linux/notifier.h>
+ #include <linux/interrupt.h>
+ #include <net/netfilter/nf_conntrack_expect.h>
++#if defined(CONFIG_MIPS_BRCM)
++#include <linux/blog.h>
++#endif
+ 
+ #ifdef CONFIG_NF_CONNTRACK_EVENTS
+ struct nf_conntrack_ecache {
+@@ -61,6 +64,9 @@ nf_conntrack_event_cache(enum ip_conntra
+ 	if (ct != ecache->ct)
+ 		__nf_ct_event_cache_init(ct);
+ 	ecache->events |= event;
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++    blog_ctev( skb, event );    /* Log event into skb->blog */
++#endif
+ 	local_bh_enable();
+ }
+ 
+diff -pNur linux-2.6.21.7/include/net/netfilter/nf_conntrack.h linux-2.6.21.7/include/net/netfilter/nf_conntrack.h
+--- linux-2.6.21.7/include/net/netfilter/nf_conntrack.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/net/netfilter/nf_conntrack.h	2008-10-14 14:24:25.000000000 +0200
+@@ -22,6 +22,7 @@
+ #include <linux/netfilter/nf_conntrack_tcp.h>
+ #include <linux/netfilter/nf_conntrack_sctp.h>
+ #include <linux/netfilter/nf_conntrack_proto_gre.h>
++#include <linux/netfilter/nf_conntrack_proto_esp.h>
+ #include <net/netfilter/ipv4/nf_conntrack_icmp.h>
+ #include <net/netfilter/ipv6/nf_conntrack_icmpv6.h>
+ 
+@@ -35,6 +36,7 @@ union nf_conntrack_proto {
+ 	struct ip_ct_icmp icmp;
+ 	struct nf_ct_icmpv6 icmpv6;
+ 	struct nf_ct_gre gre;
++	struct nf_ct_esp esp;
+ };
+ 
+ union nf_conntrack_expect_proto {
+@@ -46,6 +48,7 @@ union nf_conntrack_expect_proto {
+ #include <linux/netfilter/nf_conntrack_pptp.h>
+ #include <linux/netfilter/nf_conntrack_h323.h>
+ #include <linux/netfilter/nf_conntrack_sane.h>
++#include <linux/netfilter/nf_conntrack_ipsec.h>
+ 
+ /* per conntrack: application helper private data */
+ union nf_conntrack_help {
+@@ -54,6 +57,7 @@ union nf_conntrack_help {
+ 	struct nf_ct_pptp_master ct_pptp_info;
+ 	struct nf_ct_h323_master ct_h323_info;
+ 	struct nf_ct_sane_master ct_sane_info;
++	struct nf_ct_ipsec_master ct_ipsec_info;
+ };
+ 
+ #include <linux/types.h>
+@@ -99,6 +103,12 @@ struct nf_conn
+ 	/* XXX should I move this to the tail ? - Y.K */
+ 	/* These are my tuples; original and reply */
+ 	struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++    unsigned int blog_key[IP_CT_DIR_MAX];   /* Associating blogged flows */
++#endif
++#if defined(CONFIG_MIPS_BRCM)
++    	struct list_head safe_list; /* bugfix for lost connections */
++#endif
+ 
+ 	/* Have we seen traffic both ways yet? (bitset) */
+ 	unsigned long status;
+diff -pNur linux-2.6.21.7/include/net/netfilter/nf_conntrack_tuple.h linux-2.6.21.7/include/net/netfilter/nf_conntrack_tuple.h
+--- linux-2.6.21.7/include/net/netfilter/nf_conntrack_tuple.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/net/netfilter/nf_conntrack_tuple.h	2008-10-14 14:24:54.000000000 +0200
+@@ -52,6 +52,9 @@ union nf_conntrack_man_proto
+ 	struct {
+ 		__be16 key;	/* GRE key is 32bit, PPtP only uses 16bit */
+ 	} gre;
++	struct {
++		__be16 spi;
++	} esp;
+ };
+ 
+ /* The manipulable part of the tuple. */
+@@ -90,6 +93,9 @@ struct nf_conntrack_tuple
+ 			struct {
+ 				__be16 key;
+ 			} gre;
++			struct {
++				__be16 spi;
++			} esp;
+ 		} u;
+ 
+ 		/* The protocol. */
+diff -pNur linux-2.6.21.7/net/netfilter/Kconfig linux-2.6.21.7/net/netfilter/Kconfig
+--- linux-2.6.21.7/net/netfilter/Kconfig	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/netfilter/Kconfig	2008-10-10 02:43:10.000000000 +0200
+@@ -123,6 +123,12 @@ config NF_CT_PROTO_GRE
+ 	tristate
+ 	depends on NF_CONNTRACK
+ 
++#BRCM begin
++config NF_CT_PROTO_ESP
++	tristate
++	depends on NF_CONNTRACK
++#BRCM end
++
+ config NF_CT_PROTO_SCTP
+ 	tristate 'SCTP protocol connection tracking support (EXPERIMENTAL)'
+ 	depends on EXPERIMENTAL && NF_CONNTRACK
+@@ -235,6 +241,13 @@ config NF_CONNTRACK_PPTP
+ 
+ 	  To compile it as a module, choose M here.  If unsure, say N.
+ 
++#BRCM begin
++config NF_CONNTRACK_IPSEC
++	tristate "IPSec protocol support"
++	depends on NF_CONNTRACK
++	select NF_CT_PROTO_ESP
++#BRCM end
++
+ config NF_CONNTRACK_SANE
+ 	tristate "SANE protocol support (EXPERIMENTAL)"
+ 	depends on EXPERIMENTAL && NF_CONNTRACK
+diff -pNur linux-2.6.21.7/net/netfilter/Makefile linux-2.6.21.7/net/netfilter/Makefile
+--- linux-2.6.21.7/net/netfilter/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/netfilter/Makefile	2008-10-10 02:43:10.000000000 +0200
+@@ -15,6 +15,7 @@ obj-$(CONFIG_NF_CONNTRACK) += nf_conntra
+ 
+ # SCTP protocol connection tracking
+ obj-$(CONFIG_NF_CT_PROTO_GRE) += nf_conntrack_proto_gre.o
++obj-$(CONFIG_NF_CT_PROTO_ESP) += nf_conntrack_proto_esp.o
+ obj-$(CONFIG_NF_CT_PROTO_SCTP) += nf_conntrack_proto_sctp.o
+ 
+ # netlink interface for nf_conntrack
+diff -pNur linux-2.6.21.7/net/netfilter/nf_conntrack_core.c linux-2.6.21.7/net/netfilter/nf_conntrack_core.c
+--- linux-2.6.21.7/net/netfilter/nf_conntrack_core.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/netfilter/nf_conntrack_core.c	2008-10-10 02:43:10.000000000 +0200
+@@ -47,6 +47,9 @@
+ #include <linux/netdevice.h>
+ #include <linux/socket.h>
+ #include <linux/mm.h>
++#if defined(CONFIG_MIPS_BRCM)
++#include <linux/blog.h>
++#endif
+ 
+ #include <net/netfilter/nf_conntrack.h>
+ #include <net/netfilter/nf_conntrack_l3proto.h>
+@@ -124,6 +127,16 @@ static DEFINE_MUTEX(nf_ct_cache_mutex);
+ static int nf_conntrack_hash_rnd_initted;
+ static unsigned int nf_conntrack_hash_rnd;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++void (*dynahelper_ref)(struct module * m) = NULL;
++EXPORT_SYMBOL_GPL(dynahelper_ref);
++void (*dynahelper_unref)(struct module * m) = NULL;
++EXPORT_SYMBOL_GPL(dynahelper_unref);
++
++/* bugfix for lost connection */
++LIST_HEAD(safe_list);
++#endif
++
+ static u_int32_t __hash_conntrack(const struct nf_conntrack_tuple *tuple,
+ 				  unsigned int size, unsigned int rnd)
+ {
+@@ -318,8 +331,26 @@ destroy_conntrack(struct nf_conntrack *n
+ 	struct nf_conntrack_l3proto *l3proto;
+ 	struct nf_conntrack_l4proto *l4proto;
+ 	typeof(nf_conntrack_destroyed) destroyed;
++#if defined(CONFIG_MIPS_BRCM)
++	struct nf_conn_help *help = nfct_help(ct);
++#endif
+ 
+-	DEBUGP("destroy_conntrack(%p)\n", ct);
++#if defined(CONFIG_MIPS_BRCM)
++#if defined(CONFIG_BLOG)
++    DEBUGP("destroy_conntrack(%p) blog keys[0x%08x,0x%08x]\n",
++           ct, ct->blog_key[IP_CT_DIR_ORIGINAL], ct->blog_key[IP_CT_DIR_REPLY]);
++
++    clear_bit(IPS_BLOG_BIT, &ct->status);   /* Disable further blogging */
++    if ( (ct->blog_key[IP_CT_DIR_ORIGINAL] != 0)
++         || (ct->blog_key[IP_CT_DIR_REPLY] != 0) ) 
++        blog_stop(NULL, ct);      /* Conntrack going away, stop associated flows */
++#endif
++	if (nf_ct_is_confirmed(ct) && help && help->helper && dynahelper_unref)
++		dynahelper_unref(help->helper->me);
++#else
++    DEBUGP("destroy_conntrack(%p)\n", ct);
++#endif
++	
+ 	NF_CT_ASSERT(atomic_read(&nfct->use) == 0);
+ 	NF_CT_ASSERT(!timer_pending(&ct->timeout));
+ 
+@@ -506,8 +537,13 @@ __nf_conntrack_confirm(struct sk_buff **
+ 	NF_CT_STAT_INC(insert);
+ 	write_unlock_bh(&nf_conntrack_lock);
+ 	help = nfct_help(ct);
+-	if (help && help->helper)
++#if defined(CONFIG_MIPS_BRCM)
++	if (help && help->helper) {
++		if (dynahelper_ref)
++			dynahelper_ref(help->helper->me);
+ 		nf_conntrack_event_cache(IPCT_HELPER, *pskb);
++	}
++#endif /* CONFIG_MIPS_BRCM */
+ #ifdef CONFIG_NF_NAT_NEEDED
+ 	if (test_bit(IPS_SRC_NAT_DONE_BIT, &ct->status) ||
+ 	    test_bit(IPS_DST_NAT_DONE_BIT, &ct->status))
+@@ -634,12 +670,20 @@ __nf_conntrack_alloc(const struct nf_con
+ 	conntrack->features = features;
+ 	atomic_set(&conntrack->ct_general.use, 1);
+ 	conntrack->ct_general.destroy = destroy_conntrack;
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++    DEBUGP("nf_conntrack_alloc: ct<%p> BLOGible\n", conntrack );
++    set_bit(IPS_BLOG_BIT, &conntrack->status);  /* Enable conntrack blogging */
++#endif
+ 	conntrack->tuplehash[IP_CT_DIR_ORIGINAL].tuple = *orig;
+ 	conntrack->tuplehash[IP_CT_DIR_REPLY].tuple = *repl;
+ 	/* Don't set timer yet: wait for confirmation */
+ 	init_timer(&conntrack->timeout);
+ 	conntrack->timeout.data = (unsigned long)conntrack;
+ 	conntrack->timeout.function = death_by_timeout;
++#if defined(CONFIG_MIPS_BRCM)
++	/* bugfix for lost connections */
++	list_add(&conntrack->safe_list, &safe_list);
++#endif
+ 	read_unlock_bh(&nf_ct_cache_lock);
+ 
+ 	return conntrack;
+@@ -667,6 +711,10 @@ EXPORT_SYMBOL_GPL(nf_conntrack_alloc);
+ void nf_conntrack_free(struct nf_conn *conntrack)
+ {
+ 	u_int32_t features = conntrack->features;
++#if defined(CONFIG_MIPS_BRCM)
++	/* bugfix for lost connections */
++	list_del(&conntrack->safe_list);
++#endif
+ 	NF_CT_ASSERT(features >= NF_CT_F_BASIC && features < NF_CT_F_NUM);
+ 	DEBUGP("nf_conntrack_free: features = 0x%x, conntrack=%p\n", features,
+ 	       conntrack);
+@@ -771,7 +819,7 @@ resolve_normal_ct(struct sk_buff *skb,
+ 	if (!nf_ct_get_tuple(skb, (unsigned int)(skb->nh.raw - skb->data),
+ 			     dataoff, l3num, protonum, &tuple, l3proto,
+ 			     l4proto)) {
+-		DEBUGP("resolve_normal_ct: Can't get tuple\n");
++		DEBUGP("resolve_normal_ct: skb<%p> Can't get tuple\n", skb);
+ 		return NULL;
+ 	}
+ 
+@@ -794,19 +842,46 @@ resolve_normal_ct(struct sk_buff *skb,
+ 	} else {
+ 		/* Once we've had two way comms, always ESTABLISHED. */
+ 		if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status)) {
+-			DEBUGP("nf_conntrack_in: normal packet for %p\n", ct);
++			DEBUGP("nf_conntrack_in: normal packet<%p> for ct<%p>\n", skb, ct);
+ 			*ctinfo = IP_CT_ESTABLISHED;
+ 		} else if (test_bit(IPS_EXPECTED_BIT, &ct->status)) {
+-			DEBUGP("nf_conntrack_in: related packet for %p\n", ct);
++			DEBUGP("nf_conntrack_in: related packet<%p> for ct<%p>\n", skb, ct);
+ 			*ctinfo = IP_CT_RELATED;
+ 		} else {
+-			DEBUGP("nf_conntrack_in: new packet for %p\n", ct);
++			DEBUGP("nf_conntrack_in: new packet<%p> for ct<%p>\n", skb, ct);
+ 			*ctinfo = IP_CT_NEW;
+ 		}
+ 		*set_reply = 0;
+ 	}
+ 	skb->nfct = &ct->ct_general;
+ 	skb->nfctinfo = *ctinfo;
++
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++    {
++        struct nf_conn_help * help = nfct_help(ct);
++
++        if ( (help != (struct nf_conn_help *)NULL) &&
++             (help->helper != (struct nf_conntrack_helper *)NULL) )
++        {
++            DEBUGP("nf_conntrack_in: skb<%p> ct<%p> helper<%s> found\n",
++                   skb, ct, help->helper->name);
++            clear_bit(IPS_BLOG_BIT, &ct->status);
++        }
++        if (test_bit(IPS_BLOG_BIT, &ct->status))    /* OK to blog ? */
++        {
++            DEBUGP("nf_conntrack_in: skb<%p> blog<%p> ct<%p>\n",
++                    skb, skb->blog_p, ct );
++            blog_nfct(skb, ct);                     /* Blog conntrack */
++        }
++        else
++        {
++            DEBUGP("nf_conntrack_in: skb<%p> ct<%p> NOT BLOGible<%p>\n",
++                    skb, ct, skb->blog_p );
++            blog_free(skb);                         /* No blogging */
++        }
++    }
++#endif
++
+ 	return ct;
+ }
+ 
+@@ -868,7 +943,7 @@ nf_conntrack_in(int pf, unsigned int hoo
+ 	if (ret < 0) {
+ 		/* Invalid: inverse of the return code tells
+ 		 * the netfilter core what to do */
+-		DEBUGP("nf_conntrack_in: Can't track with proto module\n");
++		DEBUGP("nf_conntrack_in: ct<%p> Can't track with proto module\n", ct);
+ 		nf_conntrack_put((*pskb)->nfct);
+ 		(*pskb)->nfct = NULL;
+ 		NF_CT_STAT_INC_ATOMIC(invalid);
+@@ -1132,6 +1207,25 @@ void nf_conntrack_cleanup(void)
+ 	nf_ct_event_cache_flush();
+  i_see_dead_people:
+ 	nf_conntrack_flush();
++#if defined(CONFIG_MIPS_BRCM)
++	/* bugfix for lost connections */
++	if (atomic_read(&nf_conntrack_count) != 0) {
++		unsigned int bucket = 0;
++		struct nf_conn *ct;
++		if ((ct = get_next_corpse(kill_all, NULL, &bucket)) != NULL) {
++			nf_ct_put(ct);
++		} else {
++			printk("found %d lost ct\n",
++				atomic_read(&nf_conntrack_count));
++			while(!list_empty(&safe_list)) {
++				ct = container_of(safe_list.next,
++					struct nf_conn, safe_list);
++				nf_conntrack_free(ct);
++			}
++			atomic_set(&nf_conntrack_count, 0);
++		}
++	}
++#endif
+ 	if (atomic_read(&nf_conntrack_count) != 0) {
+ 		schedule();
+ 		goto i_see_dead_people;
+@@ -1298,6 +1392,10 @@ int __init nf_conntrack_init(void)
+ 	/*  - and look it like as a confirmed connection */
+ 	set_bit(IPS_CONFIRMED_BIT, &nf_conntrack_untracked.status);
+ 
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++    blog_refresh_fn = (blog_refresh_t)__nf_ct_refresh_acct;
++#endif
++
+ 	return ret;
+ 
+ out_free_expect_slab:
+diff -pNur linux-2.6.21.7/net/netfilter/nf_conntrack_helper.c linux-2.6.21.7/net/netfilter/nf_conntrack_helper.c
+--- linux-2.6.21.7/net/netfilter/nf_conntrack_helper.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/netfilter/nf_conntrack_helper.c	2008-10-10 02:43:10.000000000 +0200
+@@ -29,6 +29,13 @@
+ 
+ static __read_mostly LIST_HEAD(helpers);
+ 
++#if defined(CONFIG_MIPS_BRCM)
++void (*dynahelper_track)(struct module * m) = NULL;
++EXPORT_SYMBOL_GPL(dynahelper_track);
++void (*dynahelper_untrack)(struct module * m) = NULL;
++EXPORT_SYMBOL_GPL(dynahelper_untrack);
++#endif /* CONFIG_MIPS_BRCM */
++
+ struct nf_conntrack_helper *
+ __nf_ct_helper_find(const struct nf_conntrack_tuple *tuple)
+ {
+@@ -114,6 +121,10 @@ int nf_conntrack_helper_register(struct 
+ 	}
+ 	write_lock_bh(&nf_conntrack_lock);
+ 	list_add(&me->list, &helpers);
++#if defined(CONFIG_MIPS_BRCM)
++	if (dynahelper_track)
++		dynahelper_track(me->me);
++#endif /* CONFIG_MIPS_BRCM */
+ 	write_unlock_bh(&nf_conntrack_lock);
+ 
+ 	return 0;
+@@ -147,6 +158,10 @@ void nf_conntrack_helper_unregister(stru
+ 		list_for_each_entry(h, &nf_conntrack_hash[i], list)
+ 			unhelp(h, me);
+ 	}
++#if defined(CONFIG_MIPS_BRCM)
++	if (dynahelper_untrack)
++		dynahelper_untrack(me->me);
++#endif /* CONFIG_MIPS_BRCM */
+ 	write_unlock_bh(&nf_conntrack_lock);
+ 
+ 	/* Someone could be still looking at the helper in a bh. */
+diff -pNur linux-2.6.21.7/net/netfilter/nf_conntrack_proto_tcp.c linux-2.6.21.7/net/netfilter/nf_conntrack_proto_tcp.c
+--- linux-2.6.21.7/net/netfilter/nf_conntrack_proto_tcp.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/netfilter/nf_conntrack_proto_tcp.c	2008-10-10 02:43:10.000000000 +0200
+@@ -44,20 +44,35 @@
+ #include <net/netfilter/nf_conntrack_l4proto.h>
+ #include <net/netfilter/nf_conntrack_ecache.h>
+ 
++#if defined(CONFIG_MIPS_BRCM)
++#include <linux/blog.h>
++#endif
++
+ #if 0
+ #define DEBUGP printk
+ #define DEBUGP_VARS
++const char * tcpStateStr[] = {
++    "NONE", "SYN_SENT", "SYN_RECV", "ESTABLISHED", "FIN_WAIT", "CLOSE_WAIT",
++    "LAST_ACK", "TIME_WAIT", "CLOSE", "LISTEN", "MAX", "IGNORE"
++};
++/* Disable printing in tcp_in_window */
++#define DEBUGR(format, args...)
+ #else
+ #define DEBUGP(format, args...)
++#define DEBUGR(format, args...)
+ #endif
+ 
+ /* Protects conntrack->proto.tcp */
+ static DEFINE_RWLOCK(tcp_lock);
+ 
++#if defined(CONFIG_MIPS_BRCM)
++static int nf_ct_tcp_be_liberal __read_mostly = 1;
++#else
+ /* "Be conservative in what you do,
+     be liberal in what you accept from others."
+     If it's non-zero, we mark only out of window RST segments as INVALID. */
+ static int nf_ct_tcp_be_liberal __read_mostly = 0;
++#endif
+ 
+ /* If it is set to zero, we disable picking up already established
+    connections. */
+@@ -970,14 +985,27 @@ static int tcp_packet(struct nf_conn *co
+ 	conntrack->proto.tcp.last_index = index;
+ 
+ 	DEBUGP("tcp_conntracks: src=%u.%u.%u.%u:%hu dst=%u.%u.%u.%u:%hu "
+-	       "syn=%i ack=%i fin=%i rst=%i old=%i new=%i\n",
+-		NIPQUAD(iph->saddr), ntohs(th->source),
+-		NIPQUAD(iph->daddr), ntohs(th->dest),
++	       "syn=%i ack=%i fin=%i rst=%i old=%s new=%s\n",
++		NIPQUAD(skb->nh.iph.saddr), ntohs(th->source),
++		NIPQUAD(skb->nh.iph.daddr), ntohs(th->dest),
+ 		(th->syn ? 1 : 0), (th->ack ? 1 : 0),
+ 		(th->fin ? 1 : 0), (th->rst ? 1 : 0),
+-		old_state, new_state);
++		tcpStateStr[old_state], tcpStateStr[new_state]);
+ 
+ 	conntrack->proto.tcp.state = new_state;
++
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++    if( th->fin )       /* Abort and make this conntrack not BLOG eligible */
++    {
++        blog_stop(NULL, conntrack);
++        clear_bit(IPS_BLOG_BIT, &conntrack->status);
++    }
++    if ( conntrack->proto.tcp.state !=  TCP_CONNTRACK_ESTABLISHED ) 
++    {
++        blog_free( (struct sk_buff *)skb ); /* abort blogging this packet */
++    }
++#endif
++
+ 	if (old_state != new_state
+ 	    && (new_state == TCP_CONNTRACK_FIN_WAIT
+ 		|| new_state == TCP_CONNTRACK_CLOSE))

@@ -1,0 +1,26 @@
+Index: wide-dhcpv6-20080615/Makefile.in
+===================================================================
+--- wide-dhcpv6-20080615.orig/Makefile.in	2009-10-22 00:55:00.953701290 +0200
++++ wide-dhcpv6-20080615/Makefile.in	2009-10-22 00:55:00.964948348 +0200
+@@ -37,7 +37,7 @@
+ group= @group@
+ 
+ CFLAGS=	@CFLAGS@ @DEFS@ -I$(srcdir)/missing -DSYSCONFDIR=\"${sysconfdir}\" \
+-	-DLOCALDBDIR=\"${localdbdir}\"
++	-DLOCALDBDIR=\"${localdbdir}\" -Wall -W -Wstrict-prototypes -Werror-implicit-function-declaration
+ LDFLAGS=@LDFLAGS@
+ LIBOBJS=@LIBOBJS@
+ LIBS=	@LIBS@ @LEXLIB@
+Index: wide-dhcpv6-20080615/config.c
+===================================================================
+--- wide-dhcpv6-20080615.orig/config.c	2008-06-15 09:48:41.000000000 +0200
++++ wide-dhcpv6-20080615/config.c	2009-10-22 00:57:39.381257616 +0200
+@@ -61,6 +61,8 @@
+ #include <lease.h>
+ 
+ extern int errno;
++extern char *strptime (__const char *__restrict __s,
++		       __const char *__restrict __fmt, struct tm *__tp);
+ 
+ struct prefix_ifconf *prefix_ifconflist;
+ struct dhcp6_list siplist, sipnamelist, dnslist, dnsnamelist, ntplist;

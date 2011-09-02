@@ -1,0 +1,673 @@
+diff --exclude=.svn -pNur linux-2.6.21.7/drivers/mtd/chips/cfi_cmdset_0002.c linux-2.6.21.7/drivers/mtd/chips/cfi_cmdset_0002.c
+--- linux-2.6.21.7/drivers/mtd/chips/cfi_cmdset_0002.c	2009-01-12 11:01:42.658187531 +0100
++++ linux-2.6.21.7/drivers/mtd/chips/cfi_cmdset_0002.c	2009-01-12 11:05:15.814479180 +0100
+@@ -13,12 +13,11 @@
+  * XIP support hooks by Vitaly Wool (based on code for Intel flash
+  * by Nicolas Pitre)
+  *
++ * 25/09/2008 Christopher Moore: TopBottom fixup for many Macronix with CFI V1.0
++ *
+  * Occasionally maintained by Thayne Harbaugh tharbaugh at lnxi dot com
+  *
+  * This code is GPL
+- *
+- * $Id: cfi_cmdset_0002.c,v 1.122 2005/11/07 11:14:22 gleixner Exp $
+- *
+  */
+ 
+ #include <linux/module.h>
+@@ -46,6 +45,7 @@
+ 
+ #define MANUFACTURER_AMD	0x0001
+ #define MANUFACTURER_ATMEL	0x001F
++#define MANUFACTURER_MACRONIX	0x00C2
+ #define MANUFACTURER_SST	0x00BF
+ #define SST49LF004B	        0x0060
+ #define SST49LF040B	        0x0050
+@@ -71,8 +71,8 @@ static int get_chip(struct map_info *map
+ static void put_chip(struct map_info *map, struct flchip *chip, unsigned long adr);
+ #include "fwh_lock.h"
+ 
+-static int cfi_atmel_lock(struct mtd_info *mtd, loff_t ofs, size_t len);
+-static int cfi_atmel_unlock(struct mtd_info *mtd, loff_t ofs, size_t len);
++static int cfi_atmel_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len);
++static int cfi_atmel_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len);
+ 
+ static struct mtd_chip_driver cfi_amdstd_chipdrv = {
+ 	.probe		= NULL, /* Not usable directly */
+@@ -147,12 +147,44 @@ static void fixup_amd_bootblock(struct m
+ 
+ 	if (((major << 8) | minor) < 0x3131) {
+ 		/* CFI version 1.0 => don't trust bootloc */
++
++		DEBUG(MTD_DEBUG_LEVEL1,
++			"%s: JEDEC Vendor ID is 0x%02X Device ID is 0x%02X\n",
++			map->name, cfi->mfr, cfi->id);
++
++		/* AFAICS all 29LV400 with a bottom boot block have a device ID
++		 * of 0x22BA in 16-bit mode and 0xBA in 8-bit mode.
++		 * These were badly detected as they have the 0x80 bit set
++		 * so treat them as a special case.
++		 */
++		if (((cfi->id == 0xBA) || (cfi->id == 0x22BA)) &&
++
++			/* Macronix added CFI to their 2nd generation
++			 * MX29LV400C B/T but AFAICS no other 29LV400 (AMD,
++			 * Fujitsu, Spansion, EON, ESI and older Macronix)
++			 * has CFI.
++			 *
++			 * Therefore also check the manufacturer.
++			 * This reduces the risk of false detection due to
++			 * the 8-bit device ID.
++			 */
++			(cfi->mfr == MANUFACTURER_MACRONIX)) {
++			DEBUG(MTD_DEBUG_LEVEL1,
++				"%s: Macronix MX29LV400C with bottom boot block"
++				" detected\n", map->name);
++			extp->TopBottom = 2;	/* bottom boot */
++		} else
+ 		if (cfi->id & 0x80) {
+ 			printk(KERN_WARNING "%s: JEDEC Device ID is 0x%02X. Assuming broken CFI table.\n", map->name, cfi->id);
+ 			extp->TopBottom = 3;	/* top boot */
+ 		} else {
+ 			extp->TopBottom = 2;	/* bottom boot */
+ 		}
++
++		DEBUG(MTD_DEBUG_LEVEL1,
++			"%s: AMD CFI PRI V%c.%c has no boot block field;"
++			" deduced %s from Device ID\n", map->name, major, minor,
++			extp->TopBottom == 2 ? "bottom" : "top");
+ 	}
+ }
+ #endif
+@@ -181,10 +213,22 @@ static void fixup_convert_atmel_pri(stru
+ 	if (atmel_pri.Features & 0x02)
+ 		extp->EraseSuspend = 2;
+ 
+-	if (atmel_pri.BottomBoot)
+-		extp->TopBottom = 2;
+-	else
+-		extp->TopBottom = 3;
++	/* Some chips got it backwards... */
++	if (cfi->id == AT49BV6416) {
++		if (atmel_pri.BottomBoot)
++			extp->TopBottom = 3;
++		else
++			extp->TopBottom = 2;
++	} else {
++		if (atmel_pri.BottomBoot)
++			extp->TopBottom = 2;
++		else
++			extp->TopBottom = 3;
++	}
++
++	/* burst write mode not supported */
++	cfi->cfiq->BufWriteTimeoutTyp = 0;
++	cfi->cfiq->BufWriteTimeoutMax = 0;
+ }
+ 
+ static void fixup_use_secsi(struct mtd_info *mtd, void *param)
+@@ -213,12 +257,36 @@ static void fixup_use_atmel_lock(struct 
+ {
+ 	mtd->lock = cfi_atmel_lock;
+ 	mtd->unlock = cfi_atmel_unlock;
+-	mtd->flags |= MTD_STUPID_LOCK;
++	mtd->flags |= MTD_POWERUP_LOCK;
++}
++
++static void fixup_s29gl064n_sectors(struct mtd_info *mtd, void *param)
++{
++	struct map_info *map = mtd->priv;
++	struct cfi_private *cfi = map->fldrv_priv;
++
++	if ((cfi->cfiq->EraseRegionInfo[0] & 0xffff) == 0x003f) {
++		cfi->cfiq->EraseRegionInfo[0] |= 0x0040;
++		printk(KERN_WARNING "%s: Bad S29GL064N CFI data, adjust from 64 to 128 sectors\n", mtd->name);
++	}
++}
++
++static void fixup_s29gl032n_sectors(struct mtd_info *mtd, void *param)
++{
++	struct map_info *map = mtd->priv;
++	struct cfi_private *cfi = map->fldrv_priv;
++
++	if ((cfi->cfiq->EraseRegionInfo[1] & 0xffff) == 0x007e) {
++		cfi->cfiq->EraseRegionInfo[1] &= ~0x0040;
++		printk(KERN_WARNING "%s: Bad S29GL032N CFI data, adjust from 127 to 63 sectors\n", mtd->name);
++	}
+ }
+ 
+ static struct cfi_fixup cfi_fixup_table[] = {
++	{ CFI_MFR_ATMEL, CFI_ID_ANY, fixup_convert_atmel_pri, NULL },
+ #ifdef AMD_BOOTLOC_BUG
+ 	{ CFI_MFR_AMD, CFI_ID_ANY, fixup_amd_bootblock, NULL },
++	{ MANUFACTURER_MACRONIX, CFI_ID_ANY, fixup_amd_bootblock, NULL },
+ #endif
+ 	{ CFI_MFR_AMD, 0x0050, fixup_use_secsi, NULL, },
+ 	{ CFI_MFR_AMD, 0x0053, fixup_use_secsi, NULL, },
+@@ -226,10 +294,13 @@ static struct cfi_fixup cfi_fixup_table[
+ 	{ CFI_MFR_AMD, 0x0056, fixup_use_secsi, NULL, },
+ 	{ CFI_MFR_AMD, 0x005C, fixup_use_secsi, NULL, },
+ 	{ CFI_MFR_AMD, 0x005F, fixup_use_secsi, NULL, },
++	{ CFI_MFR_AMD, 0x0c01, fixup_s29gl064n_sectors, NULL, },
++	{ CFI_MFR_AMD, 0x1301, fixup_s29gl064n_sectors, NULL, },
++	{ CFI_MFR_AMD, 0x1a00, fixup_s29gl032n_sectors, NULL, },
++	{ CFI_MFR_AMD, 0x1a01, fixup_s29gl032n_sectors, NULL, },
+ #if !FORCE_WORD_WRITE
+ 	{ CFI_MFR_ANY, CFI_ID_ANY, fixup_use_write_buffers, NULL, },
+ #endif
+-	{ CFI_MFR_ATMEL, CFI_ID_ANY, fixup_convert_atmel_pri, NULL },
+ 	{ 0, 0, NULL, NULL }
+ };
+ static struct cfi_fixup jedec_fixup_table[] = {
+@@ -251,6 +322,14 @@ static struct cfi_fixup fixup_table[] = 
+ };
+ 
+ 
++static void cfi_fixup_major_minor(struct cfi_private *cfi,
++				  struct cfi_pri_amdstd *extp)
++{
++	if (cfi->mfr == CFI_MFR_SAMSUNG && cfi->id == 0x257e &&
++	    extp->MajorVersion == '0')
++		extp->MajorVersion = '1';
++}
++
+ struct mtd_info *cfi_cmdset_0002(struct map_info *map, int primary)
+ {
+ 	struct cfi_private *cfi = map->fldrv_priv;
+@@ -292,6 +371,8 @@ struct mtd_info *cfi_cmdset_0002(struct 
+ 			return NULL;
+ 		}
+ 
++		cfi_fixup_major_minor(cfi, extp);
++
+ 		if (extp->MajorVersion != '1' ||
+ 		    (extp->MinorVersion < '0' || extp->MinorVersion > '4')) {
+ 			printk(KERN_ERR "  Unknown Amd/Fujitsu Extended Query "
+@@ -335,17 +416,6 @@ struct mtd_info *cfi_cmdset_0002(struct 
+ 		/* Set the default CFI lock/unlock addresses */
+ 		cfi->addr_unlock1 = 0x555;
+ 		cfi->addr_unlock2 = 0x2aa;
+-		/* Modify the unlock address if we are in compatibility mode */
+-		if (	/* x16 in x8 mode */
+-			((cfi->device_type == CFI_DEVICETYPE_X8) &&
+-				(cfi->cfiq->InterfaceDesc == 2)) ||
+-			/* x32 in x16 mode */
+-			((cfi->device_type == CFI_DEVICETYPE_X16) &&
+-				(cfi->cfiq->InterfaceDesc == 4)))
+-		{
+-			cfi->addr_unlock1 = 0xaaa;
+-			cfi->addr_unlock2 = 0x555;
+-		}
+ 
+ 	} /* CFI mode */
+ 	else if (cfi->cfi_mode == CFI_MODE_JEDEC) {
+@@ -1613,7 +1683,7 @@ static int __xipram do_erase_oneblock(st
+ }
+ 
+ 
+-int cfi_amdstd_erase_varsize(struct mtd_info *mtd, struct erase_info *instr)
++static int cfi_amdstd_erase_varsize(struct mtd_info *mtd, struct erase_info *instr)
+ {
+ 	unsigned long ofs, len;
+ 	int ret;
+@@ -1718,12 +1788,12 @@ out_unlock:
+ 	return ret;
+ }
+ 
+-static int cfi_atmel_lock(struct mtd_info *mtd, loff_t ofs, size_t len)
++static int cfi_atmel_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+ {
+ 	return cfi_varsize_frob(mtd, do_atmel_lock, ofs, len, NULL);
+ }
+ 
+-static int cfi_atmel_unlock(struct mtd_info *mtd, loff_t ofs, size_t len)
++static int cfi_atmel_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+ {
+ 	return cfi_varsize_frob(mtd, do_atmel_unlock, ofs, len, NULL);
+ }
+@@ -1761,6 +1831,7 @@ static void cfi_amdstd_sync (struct mtd_
+ 
+ 		default:
+ 			/* Not an idle state */
++			set_current_state(TASK_UNINTERRUPTIBLE);
+ 			add_wait_queue(&chip->wq, &wait);
+ 
+ 			spin_unlock(chip->mutex);
+diff --exclude=.svn -pNur linux-2.6.21.7/drivers/mtd/chips/cfi_probe.c linux-2.6.21.7/drivers/mtd/chips/cfi_probe.c
+--- linux-2.6.21.7/drivers/mtd/chips/cfi_probe.c	2009-01-12 11:01:42.650197765 +0100
++++ linux-2.6.21.7/drivers/mtd/chips/cfi_probe.c	2009-01-12 11:06:44.534201347 +0100
+@@ -1,7 +1,6 @@
+ /*
+    Common Flash Interface probe code.
+    (C) 2000 Red Hat. GPL'd.
+-   $Id: cfi_probe.c,v 1.86 2005/11/29 14:48:31 gleixner Exp $
+ */
+ 
+ #include <linux/module.h>
+@@ -45,17 +44,14 @@ do { \
+ 
+ #define xip_enable(base, map, cfi) \
+ do { \
+-	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL); \
+-	cfi_send_gen_cmd(0xFF, 0, base, map, cfi, cfi->device_type, NULL); \
++	cfi_qry_mode_off(base, map, cfi);		\
+ 	xip_allowed(base, map); \
+ } while (0)
+ 
+ #define xip_disable_qry(base, map, cfi) \
+ do { \
+ 	xip_disable(); \
+-	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL); \
+-	cfi_send_gen_cmd(0xFF, 0, base, map, cfi, cfi->device_type, NULL); \
+-	cfi_send_gen_cmd(0x98, 0x55, base, map, cfi, cfi->device_type, NULL); \
++	cfi_qry_mode_on(base, map, cfi); \
+ } while (0)
+ 
+ #else
+@@ -71,32 +67,6 @@ do { \
+    in: interleave,type,mode
+    ret: table index, <0 for error
+  */
+-static int __xipram qry_present(struct map_info *map, __u32 base,
+-				struct cfi_private *cfi)
+-{
+-	int osf = cfi->interleave * cfi->device_type;	// scale factor
+-	map_word val[3];
+-	map_word qry[3];
+-
+-	qry[0] = cfi_build_cmd('Q', map, cfi);
+-	qry[1] = cfi_build_cmd('R', map, cfi);
+-	qry[2] = cfi_build_cmd('Y', map, cfi);
+-
+-	val[0] = map_read(map, base + osf*0x10);
+-	val[1] = map_read(map, base + osf*0x11);
+-	val[2] = map_read(map, base + osf*0x12);
+-
+-	if (!map_word_equal(map, qry[0], val[0]))
+-		return 0;
+-
+-	if (!map_word_equal(map, qry[1], val[1]))
+-		return 0;
+-
+-	if (!map_word_equal(map, qry[2], val[2]))
+-		return 0;
+-
+-	return 1; 	// "QRY" found
+-}
+ 
+ static int __xipram cfi_probe_chip(struct map_info *map, __u32 base,
+ 				   unsigned long *chip_map, struct cfi_private *cfi)
+@@ -117,11 +87,7 @@ static int __xipram cfi_probe_chip(struc
+ 	}
+ 
+ 	xip_disable();
+-	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL);
+-	cfi_send_gen_cmd(0xFF, 0, base, map, cfi, cfi->device_type, NULL);
+-	cfi_send_gen_cmd(0x98, 0x55, base, map, cfi, cfi->device_type, NULL);
+-
+-	if (!qry_present(map,base,cfi)) {
++	if (!cfi_qry_mode_on(base, map, cfi)) {
+ 		xip_enable(base, map, cfi);
+ 		return 0;
+ 	}
+@@ -142,14 +108,13 @@ static int __xipram cfi_probe_chip(struc
+  		start = i << cfi->chipshift;
+ 		/* This chip should be in read mode if it's one
+ 		   we've already touched. */
+-		if (qry_present(map, start, cfi)) {
++		if (cfi_qry_present(map, start, cfi)) {
+ 			/* Eep. This chip also had the QRY marker.
+ 			 * Is it an alias for the new one? */
+-			cfi_send_gen_cmd(0xF0, 0, start, map, cfi, cfi->device_type, NULL);
+-			cfi_send_gen_cmd(0xFF, 0, start, map, cfi, cfi->device_type, NULL);
++			cfi_qry_mode_off(start, map, cfi);
+ 
+ 			/* If the QRY marker goes away, it's an alias */
+-			if (!qry_present(map, start, cfi)) {
++			if (!cfi_qry_present(map, start, cfi)) {
+ 				xip_allowed(base, map);
+ 				printk(KERN_DEBUG "%s: Found an alias at 0x%x for the chip at 0x%lx\n",
+ 				       map->name, base, start);
+@@ -159,10 +124,9 @@ static int __xipram cfi_probe_chip(struc
+ 			 * unfortunate. Stick the new chip in read mode
+ 			 * too and if it's the same, assume it's an alias. */
+ 			/* FIXME: Use other modes to do a proper check */
+-			cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL);
+-			cfi_send_gen_cmd(0xFF, 0, start, map, cfi, cfi->device_type, NULL);
++			cfi_qry_mode_off(base, map, cfi);
+ 
+-			if (qry_present(map, base, cfi)) {
++			if (cfi_qry_present(map, base, cfi)) {
+ 				xip_allowed(base, map);
+ 				printk(KERN_DEBUG "%s: Found an alias at 0x%x for the chip at 0x%lx\n",
+ 				       map->name, base, start);
+@@ -177,8 +141,7 @@ static int __xipram cfi_probe_chip(struc
+ 	cfi->numchips++;
+ 
+ 	/* Put it back into Read Mode */
+-	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL);
+-	cfi_send_gen_cmd(0xFF, 0, base, map, cfi, cfi->device_type, NULL);
++	cfi_qry_mode_off(base, map, cfi);
+ 	xip_allowed(base, map);
+ 
+ 	printk(KERN_INFO "%s: Found %d x%d devices at 0x%x in %d-bit bank\n",
+@@ -232,10 +195,13 @@ static int __xipram cfi_chip_setup(struc
+ 	cfi->mfr = cfi_read_query16(map, base);
+ 	cfi->id = cfi_read_query16(map, base + ofs_factor);
+ 
++	/* Get AMD/Spansion extended JEDEC ID */
++	if (cfi->mfr == CFI_MFR_AMD && (cfi->id & 0xff) == 0x7e)
++		cfi->id = cfi_read_query(map, base + 0xe * ofs_factor) << 8 |
++			  cfi_read_query(map, base + 0xf * ofs_factor);
++
+ 	/* Put it back into Read Mode */
+-	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL);
+-	/* ... even if it's an Intel chip */
+-	cfi_send_gen_cmd(0xFF, 0, base, map, cfi, cfi->device_type, NULL);
++	cfi_qry_mode_off(base, map, cfi);
+ 	xip_allowed(base, map);
+ 
+ 	/* Do any necessary byteswapping */
+@@ -370,27 +336,27 @@ static void print_cfi_ident(struct cfi_i
+ 	printk("Device size: 0x%X bytes (%d MiB)\n", 1 << cfip->DevSize, 1<< (cfip->DevSize - 20));
+ 	printk("Flash Device Interface description: 0x%4.4X\n", cfip->InterfaceDesc);
+ 	switch(cfip->InterfaceDesc) {
+-	case 0:
++	case CFI_INTERFACE_X8_ASYNC:
+ 		printk("  - x8-only asynchronous interface\n");
+ 		break;
+ 
+-	case 1:
++	case CFI_INTERFACE_X16_ASYNC:
+ 		printk("  - x16-only asynchronous interface\n");
+ 		break;
+ 
+-	case 2:
++	case CFI_INTERFACE_X8_BY_X16_ASYNC:
+ 		printk("  - supports x8 and x16 via BYTE# with asynchronous interface\n");
+ 		break;
+ 
+-	case 3:
++	case CFI_INTERFACE_X32_ASYNC:
+ 		printk("  - x32-only asynchronous interface\n");
+ 		break;
+ 
+-	case 4:
++	case CFI_INTERFACE_X16_BY_X32_ASYNC:
+ 		printk("  - supports x16 and x32 via Word# with asynchronous interface\n");
+ 		break;
+ 
+-	case 65535:
++	case CFI_INTERFACE_NOT_ALLOWED:
+ 		printk("  - Not Allowed / Reserved\n");
+ 		break;
+ 
+diff --exclude=.svn -pNur linux-2.6.21.7/drivers/mtd/chips/cfi_util.c linux-2.6.21.7/drivers/mtd/chips/cfi_util.c
+--- linux-2.6.21.7/drivers/mtd/chips/cfi_util.c	2009-01-12 11:01:42.650197765 +0100
++++ linux-2.6.21.7/drivers/mtd/chips/cfi_util.c	2009-01-12 11:07:24.210365845 +0100
+@@ -6,9 +6,6 @@
+  * Copyright (C) 2003 STMicroelectronics Limited
+  *
+  * This code is covered by the GPL.
+- *
+- * $Id: cfi_util.c,v 1.10 2005/11/07 11:14:23 gleixner Exp $
+- *
+  */
+ 
+ #include <linux/module.h>
+@@ -27,6 +24,66 @@
+ #include <linux/mtd/cfi.h>
+ #include <linux/mtd/compatmac.h>
+ 
++int __xipram cfi_qry_present(struct map_info *map, __u32 base,
++			     struct cfi_private *cfi)
++{
++	int osf = cfi->interleave * cfi->device_type;	/* scale factor */
++	map_word val[3];
++	map_word qry[3];
++
++	qry[0] = cfi_build_cmd('Q', map, cfi);
++	qry[1] = cfi_build_cmd('R', map, cfi);
++	qry[2] = cfi_build_cmd('Y', map, cfi);
++
++	val[0] = map_read(map, base + osf*0x10);
++	val[1] = map_read(map, base + osf*0x11);
++	val[2] = map_read(map, base + osf*0x12);
++
++	if (!map_word_equal(map, qry[0], val[0]))
++		return 0;
++
++	if (!map_word_equal(map, qry[1], val[1]))
++		return 0;
++
++	if (!map_word_equal(map, qry[2], val[2]))
++		return 0;
++
++	return 1; 	/* "QRY" found */
++}
++EXPORT_SYMBOL_GPL(cfi_qry_present);
++
++int __xipram cfi_qry_mode_on(uint32_t base, struct map_info *map,
++			     struct cfi_private *cfi)
++{
++	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL);
++	cfi_send_gen_cmd(0x98, 0x55, base, map, cfi, cfi->device_type, NULL);
++	if (cfi_qry_present(map, base, cfi))
++		return 1;
++	/* QRY not found probably we deal with some odd CFI chips */
++	/* Some revisions of some old Intel chips? */
++	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL);
++	cfi_send_gen_cmd(0xFF, 0, base, map, cfi, cfi->device_type, NULL);
++	cfi_send_gen_cmd(0x98, 0x55, base, map, cfi, cfi->device_type, NULL);
++	if (cfi_qry_present(map, base, cfi))
++		return 1;
++	/* ST M29DW chips */
++	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL);
++	cfi_send_gen_cmd(0x98, 0x555, base, map, cfi, cfi->device_type, NULL);
++	if (cfi_qry_present(map, base, cfi))
++		return 1;
++	/* QRY not found */
++	return 0;
++}
++EXPORT_SYMBOL_GPL(cfi_qry_mode_on);
++
++void __xipram cfi_qry_mode_off(uint32_t base, struct map_info *map,
++			       struct cfi_private *cfi)
++{
++	cfi_send_gen_cmd(0xF0, 0, base, map, cfi, cfi->device_type, NULL);
++	cfi_send_gen_cmd(0xFF, 0, base, map, cfi, cfi->device_type, NULL);
++}
++EXPORT_SYMBOL_GPL(cfi_qry_mode_off);
++
+ struct cfi_extquery *
+ __xipram cfi_read_pri(struct map_info *map, __u16 adr, __u16 size, const char* name)
+ {
+@@ -51,8 +108,7 @@ __xipram cfi_read_pri(struct map_info *m
+ #endif
+ 
+ 	/* Switch it into Query Mode */
+-	cfi_send_gen_cmd(0x98, 0x55, base, map, cfi, cfi->device_type, NULL);
+-
++	cfi_qry_mode_on(base, map, cfi);
+ 	/* Read in the Extended Query Table */
+ 	for (i=0; i<size; i++) {
+ 		((unsigned char *)extp)[i] =
+@@ -60,8 +116,7 @@ __xipram cfi_read_pri(struct map_info *m
+ 	}
+ 
+ 	/* Make sure it returns to read mode */
+-	cfi_send_gen_cmd(0xf0, 0, base, map, cfi, cfi->device_type, NULL);
+-	cfi_send_gen_cmd(0xff, 0, base, map, cfi, cfi->device_type, NULL);
++	cfi_qry_mode_off(base, map, cfi);
+ 
+ #ifdef CONFIG_MTD_XIP
+ 	(void) map_read(map, base);
+diff --exclude=.svn -pNur linux-2.6.21.7/drivers/mtd/chips/fwh_lock.h linux-2.6.21.7/drivers/mtd/chips/fwh_lock.h
+--- linux-2.6.21.7/drivers/mtd/chips/fwh_lock.h	2009-01-12 11:01:42.654182110 +0100
++++ linux-2.6.21.7/drivers/mtd/chips/fwh_lock.h	2009-01-12 11:07:35.758260152 +0100
+@@ -65,18 +65,19 @@ static int fwh_xxlock_oneblock(struct ma
+ 		return ret;
+ 	}
+ 
++	chip->oldstate = chip->state;
+ 	chip->state = xxlt->state;
+ 	map_write(map, CMD(xxlt->val), adr);
+ 
+ 	/* Done and happy. */
+-	chip->state = FL_READY;
++	chip->state = chip->oldstate;
+ 	put_chip(map, chip, adr);
+ 	spin_unlock(chip->mutex);
+ 	return 0;
+ }
+ 
+ 
+-static int fwh_lock_varsize(struct mtd_info *mtd, loff_t ofs, size_t len)
++static int fwh_lock_varsize(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+ {
+ 	int ret;
+ 
+@@ -87,7 +88,7 @@ static int fwh_lock_varsize(struct mtd_i
+ }
+ 
+ 
+-static int fwh_unlock_varsize(struct mtd_info *mtd, loff_t ofs, size_t len)
++static int fwh_unlock_varsize(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+ {
+ 	int ret;
+ 
+diff --exclude=.svn -pNur linux-2.6.21.7/drivers/mtd/chips/Kconfig linux-2.6.21.7/drivers/mtd/chips/Kconfig
+--- linux-2.6.21.7/drivers/mtd/chips/Kconfig	2009-01-12 11:01:42.646187232 +0100
++++ linux-2.6.21.7/drivers/mtd/chips/Kconfig	2009-01-12 11:07:07.250437955 +0100
+@@ -190,7 +190,7 @@ config MTD_CFI_INTELEXT
+ 	  StrataFlash and other parts.
+ 
+ config MTD_CFI_AMDSTD
+-	tristate "Support for AMD/Fujitsu flash chips"
++	tristate "Support for AMD/Fujitsu/Spansion flash chips"
+ 	depends on MTD_GEN_PROBE
+ 	select MTD_CFI_UTIL
+ 	help
+diff --exclude=.svn -pNur linux-2.6.21.7/drivers/mtd/mtdcore.c linux-2.6.21.7/drivers/mtd/mtdcore.c
+--- linux-2.6.21.7/drivers/mtd/mtdcore.c	2009-01-12 11:01:42.810187539 +0100
++++ linux-2.6.21.7/drivers/mtd/mtdcore.c	2009-01-12 11:24:27.702330570 +0100
+@@ -59,7 +59,7 @@ int add_mtd_device(struct mtd_info *mtd)
+ 
+ 			/* Some chips always power up locked. Unlock them now */
+ 			if ((mtd->flags & MTD_WRITEABLE)
+-			    && (mtd->flags & MTD_STUPID_LOCK) && mtd->unlock) {
++			    && (mtd->flags & MTD_POWERUP_LOCK) && mtd->unlock) {
+ 				if (mtd->unlock(mtd, 0, mtd->size))
+ 					printk(KERN_WARNING
+ 					       "%s: unlock failed, "
+diff --exclude=.svn -pNur linux-2.6.21.7/include/linux/mtd/cfi.h linux-2.6.21.7/include/linux/mtd/cfi.h
+--- linux-2.6.21.7/include/linux/mtd/cfi.h	2009-01-12 11:02:31.303296653 +0100
++++ linux-2.6.21.7/include/linux/mtd/cfi.h	2009-01-12 11:32:45.254468788 +0100
+@@ -57,6 +57,15 @@
+ #define cfi_interleave_is_8(cfi) (0)
+ #endif
+ 
++#ifndef cfi_interleave
++#warning No CONFIG_MTD_CFI_Ix selected. No NOR chip support can work.
++static inline int cfi_interleave(void *cfi)
++{
++	BUG();
++	return 0;
++}
++#endif
++
+ static inline int cfi_interleave_supported(int i)
+ {
+ 	switch (i) {
+@@ -89,6 +98,18 @@ static inline int cfi_interleave_support
+ #define CFI_DEVICETYPE_X32 (32 / 8)
+ #define CFI_DEVICETYPE_X64 (64 / 8)
+ 
++
++/* Device Interface Code Assignments from the "Common Flash Memory Interface
++ * Publication 100" dated December 1, 2001.
++ */
++#define CFI_INTERFACE_X8_ASYNC		0x0000
++#define CFI_INTERFACE_X16_ASYNC		0x0001
++#define CFI_INTERFACE_X8_BY_X16_ASYNC	0x0002
++#define CFI_INTERFACE_X32_ASYNC		0x0003
++#define CFI_INTERFACE_X16_BY_X32_ASYNC	0x0005
++#define CFI_INTERFACE_NOT_ALLOWED	0xffff
++
++
+ /* NB: We keep these structures in memory in HOST byteorder, except
+  * where individually noted.
+  */
+@@ -261,9 +282,25 @@ struct cfi_private {
+ /*
+  * Returns the command address according to the given geometry.
+  */
+-static inline uint32_t cfi_build_cmd_addr(uint32_t cmd_ofs, int interleave, int type)
++static inline uint32_t cfi_build_cmd_addr(uint32_t cmd_ofs,
++				struct map_info *map, struct cfi_private *cfi)
+ {
+-	return (cmd_ofs * type) * interleave;
++	unsigned bankwidth = map_bankwidth(map);
++	unsigned interleave = cfi_interleave(cfi);
++	unsigned type = cfi->device_type;
++	uint32_t addr;
++	
++	addr = (cmd_ofs * type) * interleave;
++
++	/* Modify the unlock address if we are in compatiblity mode.
++	 * For 16bit devices on 8 bit busses
++	 * and 32bit devices on 16 bit busses
++	 * set the low bit of the alternating bit sequence of the address.
++	 */
++	if (((type * interleave) > bankwidth) && ((uint8_t)cmd_ofs == 0xaa))
++		addr |= (type >> 1)*interleave;
++
++	return  addr;
+ }
+ 
+ /*
+@@ -409,8 +446,7 @@ static inline uint32_t cfi_send_gen_cmd(
+ 				int type, map_word *prev_val)
+ {
+ 	map_word val;
+-	uint32_t addr = base + cfi_build_cmd_addr(cmd_addr, cfi_interleave(cfi), type);
+-
++	uint32_t addr = base + cfi_build_cmd_addr(cmd_addr, map, cfi);
+ 	val = cfi_build_cmd(cmd, map, cfi);
+ 
+ 	if (prev_val)
+@@ -463,6 +499,13 @@ static inline void cfi_udelay(int us)
+ 	}
+ }
+ 
++int cfi_qry_present(struct map_info *map, __u32 base,
++			     struct cfi_private *cfi);
++int cfi_qry_mode_on(uint32_t base, struct map_info *map,
++			     struct cfi_private *cfi);
++void cfi_qry_mode_off(uint32_t base, struct map_info *map,
++			       struct cfi_private *cfi);
++
+ struct cfi_extquery *cfi_read_pri(struct map_info *map, uint16_t adr, uint16_t size,
+ 			     const char* name);
+ struct cfi_fixup {
+@@ -477,6 +520,7 @@ struct cfi_fixup {
+ 
+ #define CFI_MFR_AMD 0x0001
+ #define CFI_MFR_ATMEL 0x001F
++#define CFI_MFR_SAMSUNG 0x00EC
+ #define CFI_MFR_ST  0x0020 	/* STMicroelectronics */
+ 
+ void cfi_fixup(struct mtd_info *mtd, struct cfi_fixup* fixups);
+diff --exclude=.svn -pNur linux-2.6.21.7/include/mtd/mtd-abi.h linux-2.6.21.7/include/mtd/mtd-abi.h
+--- linux-2.6.21.7/include/mtd/mtd-abi.h	2009-01-12 11:02:37.102187248 +0100
++++ linux-2.6.21.7/include/mtd/mtd-abi.h	2009-01-12 11:15:46.830176881 +0100
+@@ -28,7 +28,7 @@ struct mtd_oob_buf {
+ #define MTD_WRITEABLE		0x400	/* Device is writeable */
+ #define MTD_BIT_WRITEABLE	0x800	/* Single bits can be flipped */
+ #define MTD_NO_ERASE		0x1000	/* No erase necessary */
+-#define MTD_STUPID_LOCK		0x2000	/* Always locked after reset */
++#define MTD_POWERUP_LOCK	0x2000	/* Always locked after reset */
+ 
+ // Some common devices / combinations of capabilities
+ #define MTD_CAP_ROM		0

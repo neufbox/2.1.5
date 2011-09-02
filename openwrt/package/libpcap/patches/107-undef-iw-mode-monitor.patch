@@ -1,0 +1,11 @@
+--- libpcap-1.0.0/pcap-linux.c	2009-04-27 15:56:24.998080405 +0200
++++ libpcap-1.0.0/pcap-linux.c	2009-04-27 15:56:39.250778997 +0200
+@@ -194,6 +194,8 @@ static const char rcsid[] _U_ =
+ typedef int		socklen_t;
+ #endif
+ 
++#undef IW_MODE_MONITOR
++
+ #ifndef MSG_TRUNC
+ /*
+  * This is being compiled on a system that lacks MSG_TRUNC; define it

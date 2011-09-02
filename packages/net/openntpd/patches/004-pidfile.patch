@@ -1,0 +1,88 @@
+diff -pruN openntpd-3.9p1.orig/ntp.c openntpd-3.9p1/ntp.c
+--- openntpd-3.9p1.orig/ntp.c	2008-11-04 09:33:06.000000000 +0100
++++ openntpd-3.9p1/ntp.c	2008-11-04 09:49:57.000000000 +0100
+@@ -54,6 +54,21 @@ void	peer_add(struct ntp_peer *);
+ void	peer_remove(struct ntp_peer *);
+ int	offset_compare(const void *, const void *);
+ 
++static inline int
++file_store_pid( char const *pidfile )
++{
++	FILE* fp = NULL;
++
++	if ( ! (fp = fopen(pidfile, "w"))  )
++		return -1;
++	
++	fprintf( fp, "%d\n", getpid() );
++
++	fclose( fp );
++	
++	return 0;
++}
++
+ void
+ ntp_sighdlr(int sig)
+ {
+@@ -93,6 +108,10 @@ ntp_main(int pipe_prnt[2], struct ntpd_c
+ 	default:
+ 		return (pid);
+ 	}
++	
++	if (nconf->pidfile != NULL)
++		if ( file_store_pid( nconf->pidfile ) != 0)
++			fatal("pidfile");
+ 
+ 	if ((se = getservbyname("ntp", "udp")) == NULL)
+ 		fatal("getservbyname");
+@@ -291,6 +310,9 @@ ntp_main(int pipe_prnt[2], struct ntpd_c
+ 	msgbuf_clear(&ibuf_main->w);
+ 	free(ibuf_main);
+ 
++	if ( nconf->pidfile )
++		unlink( nconf->pidfile );
++
+ 	log_info("ntp engine exiting");
+ 	_exit(0);
+ }
+diff -pruN openntpd-3.9p1.orig/ntpd.c openntpd-3.9p1/ntpd.c
+--- openntpd-3.9p1.orig/ntpd.c	2008-11-04 09:33:06.000000000 +0100
++++ openntpd-3.9p1/ntpd.c	2008-11-04 09:51:26.000000000 +0100
+@@ -74,7 +74,7 @@ usage(void)
+ {
+ 	extern char *__progname;
+ 
+-	fprintf(stderr, "usage: %s [-dSs] [-f file]\n", __progname);
++	fprintf(stderr, "usage: %s [-dSs] [-f file] [-p pidfile]\n", __progname);
+ 	exit(1);
+ }
+ 
+@@ -101,7 +101,7 @@ main(int argc, char *argv[])
+ 	log_init(1);		/* log to stderr until daemonized */
+ 	res_init();		/* XXX */
+ 
+-	while ((ch = getopt(argc, argv, "df:sS")) != -1) {
++	while ((ch = getopt(argc, argv, "df:p:sS")) != -1) {
+ 		switch (ch) {
+ 		case 'd':
+ 			conf.debug = 1;
+@@ -109,6 +109,9 @@ main(int argc, char *argv[])
+ 		case 'f':
+ 			conffile = optarg;
+ 			break;
++		case 'p':
++			conf.pidfile = optarg;
++			break;
+ 		case 's':
+ 			conf.settime = 1;
+ 			break;
+diff -pruN openntpd-3.9p1.orig/ntpd.h openntpd-3.9p1/ntpd.h
+--- openntpd-3.9p1.orig/ntpd.h	2008-11-04 09:33:06.000000000 +0100
++++ openntpd-3.9p1/ntpd.h	2008-11-04 09:46:37.000000000 +0100
+@@ -133,6 +133,7 @@ struct ntpd_conf {
+ 	u_int8_t				settime;
+ 	u_int8_t				debug;
+ 	u_int32_t				scale;
++	char                                   *pidfile;
+ };
+ 
+ struct buf {

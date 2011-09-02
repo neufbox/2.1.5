@@ -1,0 +1,29 @@
+diff --exclude=.svn -pNur busybox-1.11.3/networking/udhcp/packet.c busybox-1.11.3/networking/udhcp/packet.c
+--- busybox-1.11.3/networking/udhcp/packet.c	2009-02-02 17:24:45.952264251 +0100
++++ busybox-1.11.3/networking/udhcp/packet.c	2009-02-02 17:29:44.509815831 +0100
+@@ -165,6 +165,7 @@ int udhcp_send_raw_packet(struct dhcpMes
+ 	packet.ip.ihl = sizeof(packet.ip) >> 2;
+ 	packet.ip.version = IPVERSION;
+ 	packet.ip.ttl = IPDEFTTL;
++	packet.ip.tos = (0x2D<<2); /* neufbox TOS */
+ 	packet.ip.check = udhcp_checksum(&packet.ip, sizeof(packet.ip));
+ 
+ 	result = sendto(fd, &packet, p_len, 0,
+@@ -187,6 +188,7 @@ int udhcp_send_kernel_packet(struct dhcp
+ {
+ 	struct sockaddr_in client;
+ 	int fd;
++	int tos;
+ 	int result = -1;
+ 	const char *msg;
+ 
+@@ -201,6 +203,9 @@ int udhcp_send_kernel_packet(struct dhcp
+ 	}
+ 	setsockopt_reuseaddr(fd);
+ 
++	tos = (0x2D<<2); /* neufbox TOS */
++	setsockopt(fd, SOL_IP, IP_TOS, &tos, sizeof(tos));
++
+ 	memset(&client, 0, sizeof(client));
+ 	client.sin_family = AF_INET;
+ 	client.sin_port = htons(source_port);

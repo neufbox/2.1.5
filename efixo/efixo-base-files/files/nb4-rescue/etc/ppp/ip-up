@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# This file should not be modified -- make local changes to
+# /etc/ppp/ip-up.local instead
+
+# add DNS, rescue always uses ppp dns
+echo "nameserver $DNS1
+nameserver $DNS2" > /var/resolv.conf
+
+# add default route, rescue always uses ppp route
+route add default gw $IPREMOTE dev ppp0
+
+# Put ip address in a file, for upgrade
+echo $IPLOCAL > /var/ppp/ip-addr
+

@@ -1,0 +1,549 @@
+diff -pruN ./inadyn.orig/makefile inadyn-v1.96.2/makefile
+--- ./inadyn.orig/makefile	2005-09-09 23:16:50.000000000 +0200
++++ inadyn-v1.96.2/makefile	2008-08-08 19:00:55.000000000 +0200
+@@ -1,6 +1,6 @@
+ INADYN_BASE = .
+ SRCDIR = $(INADYN_BASE)/src
+-OUTDIR=bin
++OUTDIR= $(INADYN_BASE)
+ 
+ #simple arch config. No smart detection.
+ #possible values: linux, mac, solaris, yourown
+@@ -33,8 +33,8 @@ COMMON_OBJ=$(OUTDIR)/base64utils.o $(OUT
+ 	$(OUTDIR)/os_unix.o $(OUTDIR)/os_windows.o $(OUTDIR)/tcp.o $(OUTDIR)/inadyn_cmd.o
+ OBJ=$(COMMON_OBJ) $(CFG_OBJ)
+ 
+-COMPILE=gcc  -Wall  -pedantic -c  $(ARCH_SPECIFIC_CFLAGS) $(CFLAGS) -o "$(OUTDIR)/$(*F).o" $(CFG_INC) "$<"
+-LINK=gcc $(CFLAGS) -o "$(OUTFILE)" $(OBJ) $(CFG_LIB) $(ARCH_SPECIFIC_LIBS)
++COMPILE=$(CC)  -Wall  -pedantic -c  $(ARCH_SPECIFIC_CFLAGS) $(CFLAGS) -o "$(OUTDIR)/$(*F).o" $(CFG_INC) "$<"
++LINK=$(CC) $(CFLAGS) -o "$(OUTFILE)" $(OBJ) $(CFG_LIB) $(ARCH_SPECIFIC_LIBS)
+ 
+ # Pattern rules
+ $(OUTDIR)/%.o : $(SRCDIR)/%.c
+diff -pruN ./inadyn.orig/src/dyndns.c inadyn-v1.96.2/src/dyndns.c
+--- ./inadyn.orig/src/dyndns.c	2007-03-12 08:07:32.000000000 +0100
++++ inadyn-v1.96.2/src/dyndns.c	2008-08-08 19:00:55.000000000 +0200
+@@ -40,6 +40,13 @@ Author: Narcis Ilisei
+ #include "base64.h"
+ #include "get_cmd.h"
+ 
++#include <sys/time.h>
++#include <sys/stat.h>
++#include <time.h>
++
++#include <nbd/status.h>
++#include <nbd/core.h>
++
+ /* DNS systems specific configurations*/
+ 
+ DYNDNS_ORG_SPECIFIC_DATA dyndns_org_dynamic = {"dyndns"};
+@@ -276,6 +283,7 @@ static RC_TYPE do_parse_my_ip_address(DY
+ 	char *p_current_str = p_self->http_tr.p_rsp;
+ 	BOOL found;
+     char new_ip_str[IP_V4_MAX_LENGTH];
++	FILE *fp;
+ 
+ 	if (p_self->http_tr.rsp_len <= 0 || 
+ 		p_self->http_tr.p_rsp == NULL)
+@@ -314,9 +322,20 @@ static RC_TYPE do_parse_my_ip_address(DY
+ 
+ 	if (found)
+ 	{        
+-        sprintf(new_ip_str, DYNDNS_IP_ADDR_FORMAT, ip1, ip2, ip3, ip4);
+-        p_self->info.my_ip_has_changed = (strcmp(new_ip_str, p_self->info.my_ip_address.name) != 0);
++		sprintf(new_ip_str, DYNDNS_IP_ADDR_FORMAT, ip1, ip2, ip3, ip4);
++		p_self->info.my_ip_has_changed = (strcmp(new_ip_str, p_self->info.my_ip_address.name) != 0);
+ 		strcpy(p_self->info.my_ip_address.name, new_ip_str);
++		
++		fp = NULL;
++		if (p_self->info.my_ip_has_changed == 1) 
++		{ 
++			/* write new ip to cache */
++ 			if ((fp=fopen("/var/ddnsd/inadyn.cache", "w"))) 
++			{ 
++				fprintf(fp,"%s", new_ip_str);
++				fclose(fp);
++			}
++		}
+ 		return RC_OK;
+ 	}
+ 	else
+@@ -350,6 +369,8 @@ static RC_TYPE do_check_alias_update_tab
+ 				DBG_PRINTF((LOG_WARNING,"I:" MODULE_TAG "IP address for alias '%s' needs update to '%s'\n",
+ 					p_self->alias_info.names[i].name,
+ 					p_self->info.my_ip_address.name ));
++				
++				nbd_status_set("ddns_status", "need_update");
+ 			}
+         }
+     }
+@@ -409,6 +430,8 @@ static RC_TYPE do_update_alias_table(DYN
+ {
+ 	int i;
+ 	RC_TYPE rc = RC_OK;
++	struct timeval tv;
++	char buf_tv[16];
+ 	
+ 	do 
+ 	{			
+@@ -416,12 +439,14 @@ static RC_TYPE do_update_alias_table(DYN
+ 		{
+ 			if (p_self->alias_info.update_required[i] != TRUE)
+ 			{
++				nbd_status_set("ddns_status", "success");
+ 				continue;
+-			}	
++			}
+ 			
+ 			rc = http_client_init(&p_self->http_to_dyndns);
+ 			if (rc != RC_OK)
+ 			{
++				nbd_status_set("ddns_status", "error_internal");
+ 				break;
+ 			}
+ 			
+@@ -458,13 +483,24 @@ static RC_TYPE do_update_alias_table(DYN
+ 
+ 						DBG_PRINTF((LOG_WARNING,"I:" MODULE_TAG "Alias '%s' to IP '%s' updated successful.\n", 
+ 							p_self->alias_info.names[i].name,
+-							p_self->info.my_ip_address.name));                        
++							p_self->info.my_ip_address.name));  
++						
++						nbd_status_set("ddns_status", "success");
++						if(gettimeofday(&tv, NULL) == 0)
++						{
++							snprintf(buf_tv, sizeof buf_tv, "%ld", tv.tv_sec);
++						
++							nbd_status_set("ddns_lastupdate", buf_tv);
++						}
++						
+ 						p_self->times_since_last_update = 0;
+ 							
+ 					}
+ 					else
+ 					{
+ 						DBG_PRINTF((LOG_WARNING,"W:" MODULE_TAG "Error validating DYNDNS svr answer. Check usr,pass,hostname,abuse...!\n", http_tr.p_rsp));
++						nbd_status_set("ddns_status", "error_account");
++						
+                         rc = RC_DYNDNS_RSP_NOTOK;						
+ 					}
+ 					if (p_self->dbg.level > 2 || !update_ok)
+@@ -748,6 +784,7 @@ RC_TYPE dyn_dns_init(DYN_DNS_CLIENT *p_s
+ 
+ 	p_self->abort_on_network_errors = FALSE;
+ 	p_self->force_addr_update = FALSE;
++	p_self->bind_interface = FALSE;
+ 
+     if (strlen(p_self->info.proxy_server_name.name) > 0)
+     {
+@@ -820,6 +857,7 @@ RC_TYPE dyn_dns_update_ip(DYN_DNS_CLIENT
+ 		rc = do_ip_server_transaction(p_self);
+ 		if (rc != RC_OK)
+ 		{
++			nbd_status_set("ddns_status", "error_server");
+ 			DBG_PRINTF((LOG_WARNING,"W: DYNDNS: Error '%s' (0x%x) when talking to IP server\n",
+ 				errorcode_get_name(rc), rc));
+ 			break;
+@@ -833,6 +871,7 @@ RC_TYPE dyn_dns_update_ip(DYN_DNS_CLIENT
+ 		rc = do_parse_my_ip_address(p_self);
+ 		if (rc != RC_OK)
+ 		{	
++			nbd_status_set("ddns_status", "error_local_ip");
+ 			break;
+ 		}
+ 		
+@@ -873,6 +912,10 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndn
+ 	RC_TYPE rc = RC_OK;
+ 	int iterations = 0;
+ 	BOOL os_handler_installed = FALSE;
++	FILE *fp;
++	struct stat sb;
++	time_t t_mod_conf, t_mod_cache;
++
+ 
+ 	if (p_dyndns == NULL)
+ 	{
+@@ -936,7 +979,49 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndn
+         }
+     }
+ 
++    nbd_open();
++
++    nbd_status_set("ddns_status", "starting");
++
+     dyn_dns_print_hello(NULL);
++    do {
++	    fp = NULL;
++	    
++	    /* get last modification of cache and conf file, if m_time conf file is > to m_time cache file, no use cache ! */
++	    if(stat("/var/ddns/ddnsd.conf", &sb) != 0)
++	    {
++		    DBG_PRINTF((LOG_INFO, MODULE_TAG "stat on '/var/ddns/ddnsd.conf' failed !\n"));
++		    break;
++	    }
++	    t_mod_conf = sb.st_mtime;
++	    
++	    if(stat("/var/ddnsd/inadyn.cache", &sb) != 0)
++	    {
++		    DBG_PRINTF((LOG_INFO, MODULE_TAG "stat on '/var/ddnsd/inadyn.cache' failed !\n"));
++		    break;
++	    }
++	    t_mod_cache = sb.st_mtime;
++	    
++	    if(t_mod_conf <= t_mod_cache)
++	    {
++		    /*read ip cache*/
++		    if ((fp=fopen("/var/ddnsd/inadyn.cache", "r"))) 
++		    {
++		    
++			    fgets (p_dyndns->info.my_ip_address.name, sizeof (p_dyndns->info.my_ip_address.name),fp); 
++			    fclose(fp);
++			    DBG_PRINTF((LOG_INFO, MODULE_TAG "IP read from cache file is '%s'. No update required.\n", p_dyndns->info.my_ip_address.name)); 
++		    }
++		    else
++		    {
++			    DBG_PRINTF((LOG_INFO, MODULE_TAG "Error when opening cache\n"));
++		    }
++	    }
++	    else
++	    {
++		    DBG_PRINTF((LOG_INFO, MODULE_TAG "New config. No use cache.\n"));
++	    }
++    } while(0);
+ 
+ 	/* the real work here */
+ 	do
+@@ -945,12 +1030,14 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndn
+ 		rc = dyn_dns_init(p_dyndns);
+ 		if (rc != RC_OK)
+ 		{
++			nbd_status_set("ddns_status", "error_internal");
+ 			break;
+ 		}		
+ 
+ 		rc = get_encoded_user_passwd(p_dyndns);
+ 		if (rc != RC_OK)
+ 		{
++			nbd_status_set("ddns_status", "error_internal");
+ 			break;
+ 		}
+ 
+@@ -959,6 +1046,7 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndn
+ 			rc = os_install_signal_handler(p_dyndns);
+ 			if (rc != RC_OK)
+ 			{
++				nbd_status_set("ddns_status", "error_internal");
+ 				DBG_PRINTF((LOG_WARNING,"DYNDNS: Error '%s' (0x%x) installing OS signal handler\n",
+ 					errorcode_get_name(rc), rc));
+ 				break;
+@@ -974,11 +1062,11 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndn
+ 			{
+ 				DBG_PRINTF((LOG_WARNING,"W:'%s' (0x%x) updating the IPs. (it %d)\n",
+ 					errorcode_get_name(rc), rc, iterations)); 
+-                if (rc == RC_DYNDNS_RSP_NOTOK)
+-                { 
+-                    DBG_PRINTF((LOG_ERR,"E: The response of DYNDNS svr was an error! Aborting.\n"));
+-                    break;              			
+-                }
++				if (rc == RC_DYNDNS_RSP_NOTOK)
++				{ 
++					DBG_PRINTF((LOG_ERR,"E: The response of DYNDNS svr was an error! Aborting.\n"));
++					break;              			
++				}
+ 			}
+ 			else /*count only the successful iterations */
+ 			{
+@@ -989,6 +1077,7 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndn
+ 			if (iterations >= p_dyndns->total_iterations &&
+ 				p_dyndns->total_iterations != 0)
+ 			{
++				nbd_status_set("ddns_status", "");
+ 				break;
+ 			}
+ 
+@@ -996,6 +1085,7 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndn
+ 			dyn_dns_wait_for_cmd(p_dyndns);
+ 			if (p_dyndns->cmd == CMD_STOP)
+ 			{
++				nbd_status_set("ddns_status", "");
+ 				DBG_PRINTF((LOG_DEBUG,"STOP command received. Exiting.\n"));
+ 				rc = RC_OK;
+ 				break;
+@@ -1013,5 +1103,8 @@ int dyn_dns_main(DYN_DNS_CLIENT *p_dyndn
+ 	}
+ 	while(FALSE);	
+ 	
++	nbd_status_set("service_ddns_status", "down");
++	nbd_close();
++	
+ 	return rc;
+ }
+diff -pruN ./inadyn.orig/src/dyndns.h inadyn-v1.96.2/src/dyndns.h
+--- ./inadyn.orig/src/dyndns.h	2007-03-12 08:04:28.000000000 +0100
++++ inadyn-v1.96.2/src/dyndns.h	2008-08-08 19:00:55.000000000 +0200
+@@ -243,10 +243,12 @@ typedef struct DYN_DNS_CLIENT
+ 	int forced_update_times; /* the same forced update period counted in sleep periods*/
+ 	int cmd_check_period; /*time to wait for a command*/
+ 	int total_iterations;
++	char * interface;
+ 	BOOL initialized;
+ 	BOOL run_in_background;
+ 	BOOL debug_to_syslog;
+ 	BOOL change_persona;
++	BOOL bind_interface;
+ 
+ 	HTTP_CLIENT http_to_ip_server;
+ 	HTTP_CLIENT http_to_dyndns;
+diff -pruN ./inadyn.orig/src/errorcode.h inadyn-v1.96.2/src/errorcode.h
+--- ./inadyn.orig/src/errorcode.h	2007-03-12 07:45:16.000000000 +0100
++++ inadyn-v1.96.2/src/errorcode.h	2008-08-08 19:00:55.000000000 +0200
+@@ -36,6 +36,7 @@ typedef enum 
+ 	RC_IP_RECV_ERROR = 0x15,
+ 	RC_IP_OBJECT_NOT_INITIALIZED = 0x16,
+ 	RC_IP_OS_SOCKET_INIT_FAILED = 0x17,
++	RC_IP_SOCKET_BIND_ERROR = 0x18,
+ 
+ 	RC_TCP_OBJECT_NOT_INITIALIZED = 0x20,
+ 
+diff -pruN ./inadyn.orig/src/inadyn_cmd.c inadyn-v1.96.2/src/inadyn_cmd.c
+--- ./inadyn.orig/src/inadyn_cmd.c	2005-09-09 23:17:30.000000000 +0200
++++ inadyn-v1.96.2/src/inadyn_cmd.c	2008-08-08 19:00:55.000000000 +0200
+@@ -61,6 +61,7 @@ static RC_TYPE get_options_from_file_han
+ static RC_TYPE set_iterations_handler(CMD_DATA *p_cmd, int current_nr, void *p_context);
+ static RC_TYPE set_syslog_handler(CMD_DATA *p_cmd, int current_nr, void *p_context);
+ static RC_TYPE set_change_persona_handler(CMD_DATA *p_cmd, int current_nr, void *p_context);
++static RC_TYPE set_bind_interface(CMD_DATA *p_cmd, int current_nr, void *p_context);
+ static RC_TYPE print_version_handler(CMD_DATA *p_cmd, int current_nr, void *p_context);
+ 
+ static CMD_DESCRIPTION_TYPE cmd_options_table[] = 
+@@ -120,6 +121,7 @@ static CMD_DESCRIPTION_TYPE cmd_options_
+ 	{"--iterations",	1,	{set_iterations_handler, NULL},	"set the number of DNS updates. Default is 0, which means infinity."},
+ 	{"--syslog",	0,	{set_syslog_handler, NULL},	"force logging to syslog . (e.g. /var/log/messages). Works on **NIX systems only."},
+ 	{"--change_persona", 1, {set_change_persona_handler, NULL}, "after init switch to a new user/group. Parameters: <uid[:gid]> to change to. Works on **NIX systems only."},
++	{"--bind_interface", 1, {set_bind_interface, NULL}, "set interface to bind. Parameters: <interface>. Works on **NIX systems only."},
+ 	{"--version", 0, {print_version_handler, NULL}, "print the version number\n"},
+ 	{NULL,		0,	{0, NULL},	NULL }
+ };
+@@ -548,6 +550,20 @@ static RC_TYPE set_change_persona_handle
+ 	return RC_OK;
+ }
+ 
++static RC_TYPE set_bind_interface(CMD_DATA *p_cmd, int current_nr, void *p_context)
++{
++	DYN_DNS_CLIENT *p_self = (DYN_DNS_CLIENT *) p_context;
++	if (p_self == NULL)
++	{
++		return RC_INVALID_POINTER;
++	}
++	p_self->bind_interface = TRUE;
++	p_self->interface = malloc (sizeof(p_cmd->argv[current_nr]));
++    strncpy(p_self->interface, p_cmd->argv[current_nr], sizeof(p_cmd->argv[current_nr]));
++
++	return RC_OK;
++}
++
+ RC_TYPE print_version_handler(CMD_DATA *p_cmd, int current_nr, void *p_context)
+ {
+ 	DYN_DNS_CLIENT *p_self = (DYN_DNS_CLIENT *) p_context;
+diff -pruN ./inadyn.orig/src/ip.c inadyn-v1.96.2/src/ip.c
+--- ./inadyn.orig/src/ip.c	2004-10-15 11:29:00.000000000 +0200
++++ inadyn-v1.96.2/src/ip.c	2008-08-08 19:00:55.000000000 +0200
+@@ -19,10 +19,15 @@ Foundation, Inc., 59 Temple Place - Suit
+ #include <stdlib.h>
+ #include <string.h>
+ 
++#include <net/if.h>
++#include <sys/ioctl.h>
++#include <errno.h>
++#include <stdio.h>
++
+ #include "debug_if.h"
+ #include "ip.h"
+ 
+-
++#include "nbd/status.h"
+ 
+ /*public functions*/
+ 
+@@ -40,7 +45,9 @@ RC_TYPE ip_construct(IP_SOCKET *p_self)
+ 	memset(p_self, 0, sizeof(IP_SOCKET));
+ 
+ 	p_self->initialized = FALSE;
++	p_self->binded = FALSE;
+ 	p_self->socket = 0;
++	memset( &p_self->local_addr, 0,sizeof(p_self->local_addr));
+ 	memset( &p_self->remote_addr, 0,sizeof(p_self->remote_addr));
+ 	p_self->timeout = IP_DEFAULT_TIMEOUT;
+ 	
+@@ -75,6 +82,21 @@ RC_TYPE ip_destruct(IP_SOCKET *p_self)
+ RC_TYPE ip_initialize(IP_SOCKET *p_self)
+ {
+ 	RC_TYPE rc = RC_OK; 
++	struct ifreq ifr;
++	char buf_nbd[8];
++	const char * interface = NULL;
++	if(nbd_nv_get("wan_ifname", buf_nbd, sizeof buf_nbd) == 0)
++	{
++		interface = buf_nbd;
++	}
++	else
++	{
++		interface = "ppp0"; /* use ppp0 :s */
++	}
++	int tmp_sock = 0;
++	struct sockaddr_in *addrp = NULL;
++
++
+ 
+ 	if (p_self->initialized == TRUE)
+ 	{
+@@ -89,12 +111,35 @@ RC_TYPE ip_initialize(IP_SOCKET *p_self)
+ 			break;
+ 		}
+ 
++		/*local bind */
++
++		tmp_sock = socket( PF_INET, SOCK_DGRAM, 0 );
++		memset( &ifr, 0, sizeof( struct ifreq ) );
++		strncpy( ifr.ifr_name, interface, IFNAMSIZ);
++		if( ioctl( tmp_sock, SIOCGIFADDR, &ifr ) != -1 ) 
++		{
++			close(tmp_sock);
++			p_self->local_addr.sin_family = AF_INET;
++			p_self->local_addr.sin_port = htons(0); 
++			addrp = (struct sockaddr_in *)&(ifr.ifr_addr);
++			p_self->local_addr.sin_addr.s_addr = addrp->sin_addr.s_addr;
++			p_self->binded = TRUE;
++
++			DBG_PRINTF((LOG_WARNING,MODULE_TAG "IP Adress of '%s' is '%s'\n",interface,inet_ntoa(p_self->local_addr.sin_addr)));
++
++		}
++		else 
++		{
++			fprintf( stderr, "Cannot obtain IP address of '%s': %s\n",interface,strerror(errno));
++			p_self->binded = FALSE;
++			close(tmp_sock);
++		}
++		
+ 		/*remote addres */
+ 		if (p_self->p_remote_host_name != NULL)
+ 		{
+             unsigned long addr = 0;
+ 			HOSTENT* p_remotehost = (HOSTENT*) gethostbyname(p_self->p_remote_host_name);
+-			
+ 			if (p_remotehost == NULL)
+ 			{                
+                 rc = os_convert_ip_to_inet_addr(&addr, p_self->p_remote_host_name);
+@@ -103,6 +148,7 @@ RC_TYPE ip_initialize(IP_SOCKET *p_self)
+ 				    DBG_PRINTF((LOG_WARNING,MODULE_TAG "Error '0x%x' resolving host name '%s'\n", 
+ 							    os_get_socket_error(),
+ 							    p_self->p_remote_host_name));
++
+ 				    rc = RC_IP_INVALID_REMOTE_ADDR;
+ 				    break;
+                 }
+diff -pruN ./inadyn.orig/src/ip.h inadyn-v1.96.2/src/ip.h
+--- ./inadyn.orig/src/ip.h	2004-05-01 00:59:00.000000000 +0200
++++ inadyn-v1.96.2/src/ip.h	2008-08-08 19:00:55.000000000 +0200
+@@ -40,8 +40,10 @@ typedef enum
+ typedef struct 
+ {
+ 	BOOL initialized;
++	BOOL binded;
+ 	int type;
+ 	SOCKET socket; 
++	struct sockaddr_in local_addr;
+ 	struct sockaddr_in remote_addr;
+ 	const char *p_remote_host_name;  
+ 
+diff -pruN ./inadyn.orig/src/main.c inadyn-v1.96.2/src/main.c
+--- ./inadyn.orig/src/main.c	2005-02-23 23:32:56.000000000 +0100
++++ inadyn-v1.96.2/src/main.c	2008-08-08 19:00:55.000000000 +0200
+@@ -43,6 +43,9 @@ Foundation, Inc., 59 Temple Place - Suit
+ #include "errorcode.h"
+ #include "dyndns.h"
+ 
++#include <nbd/status.h>
++#include <nbd/core.h>
++
+ /* MAIN - Dyn DNS update entry point.*/
+ int inadyn_main(int argc, char* argv[])
+ {
+@@ -55,6 +58,19 @@ int inadyn_main(int argc, char* argv[])
+ 		rc = dyn_dns_construct(&p_dyndns);
+ 		if (rc != RC_OK)
+ 		{
++			nbd_open();
++			
++			if(rc == RC_IP_INVALID_REMOTE_ADDR)
++			{
++				nbd_status_set("ddns_status", "error_dns");
++			}
++			else
++			{
++				nbd_status_set("ddns_status", "error_internal");
++			}
++			nbd_status_set("service_ddns_status", "down");
++
++			nbd_close();
+ 			break;
+ 		}    
+ 		rc = dyn_dns_main(p_dyndns, argc, argv);
+@@ -75,8 +91,7 @@ int inadyn_main(int argc, char* argv[])
+ 	{
+ 		DBG_PRINTF((LOG_WARNING,"W:" MODULE_TAG "Main: Error '%s' (0x%x) in dyn_dns_destruct().\n", errorcode_get_name(rc), rc));
+ 	}
+-	 
+-
++	
+ 	os_close_dbg_output();
+ 	return (int) rc;
+ 
+diff -pruN ./inadyn.orig/src/os_unix.c inadyn-v1.96.2/src/os_unix.c
+--- ./inadyn.orig/src/os_unix.c	2005-09-07 21:22:54.000000000 +0200
++++ inadyn-v1.96.2/src/os_unix.c	2008-08-08 19:00:55.000000000 +0200
+@@ -68,6 +68,7 @@ static void unix_signal_handler(int sign
+ 		case SIGINT:
+ 		case SIGQUIT:
+ 		case SIGALRM:
++		case SIGTERM:
+ 			DBG_PRINTF((LOG_DEBUG,MODULE_TAG "Signal '0x%x' received. Sending 'Shutdown cmd'.\n", signo));
+ 			p_self->cmd = CMD_STOP;			
+ 		break;
+@@ -100,7 +101,9 @@ RC_TYPE os_install_signal_handler(void *
+ 	         sigaddset(&newact.sa_mask, SIGALRM)  ||
+              sigaction(SIGHUP, &newact, NULL)     ||
+              sigaction(SIGINT, &newact, NULL)     ||
+-             sigaction(SIGQUIT, &newact, NULL);
++             sigaction(SIGQUIT, &newact, NULL)   ||
++             sigaction(SIGTERM, &newact, NULL);
++	     
+  	if (rc != RC_OK)
+  	{
+  		DBG_PRINTF((LOG_WARNING,"DYNDNS: Error '%s' (0x%x) installing OS signal handler\n", rc));
+diff -pruN ./inadyn.orig/src/tcp.c inadyn-v1.96.2/src/tcp.c
+--- ./inadyn.orig/src/tcp.c	2005-01-30 17:08:38.000000000 +0100
++++ inadyn-v1.96.2/src/tcp.c	2008-08-08 19:00:55.000000000 +0200
+@@ -99,12 +99,22 @@ RC_TYPE tcp_initialize(TCP_SOCKET *p_sel
+ 		/*local object initalizations*/
+ 		if (p_self->super.type == TYPE_TCP)
+ 		{
++
+ 			p_self->super.socket = socket(AF_INET,SOCK_STREAM,0);
+ 			if (p_self->super.socket == -1)
+ 			{
+ 				rc = RC_IP_SOCKET_CREATE_ERROR;
+ 				break;
+ 			}
++
++			if (p_self->super.binded == TRUE)
++				if (bind(p_self->super.socket, (struct sockaddr *)& p_self->super.local_addr, sizeof(struct sockaddr_in))<0)
++				{
++					close(p_self->super.socket);
++					perror("bind");
++					rc = RC_IP_SOCKET_BIND_ERROR;
++					break;
++				}
+ 		}
+ 		else
+ 		{

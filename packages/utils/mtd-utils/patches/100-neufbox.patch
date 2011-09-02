@@ -1,0 +1,178 @@
+--- a/flashcp.c
++++ b/flashcp.c
+@@ -36,11 +36,41 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <sys/ioctl.h>
++#include <sys/mman.h>
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <mtd/mtd-user.h>
+ #include <getopt.h>
+ 
++#if defined(NB4) || defined(NB5)
++#include <kernel/box/partition.h>
++#include <kernel/box/board.h>
++#include <kernel/box/leds.h>
++#if defined(NB4)
++#include <stddef.h>
++#define  BCMTAG_EXE_USE
++#include <kernel/bcmTag.h>
++#include <kernel/bcm_hwdefs.h>
++#endif
++#ifdef HAVE_LIBNBD
++#include <nbd/leds.h>
++#else
++static int nbd_leds_set_mode(int mode)
++{
++	struct leds_dev_ioctl_struct leds_dev_ioctl = {.mode = mode};
++	int fd;
++
++	fd = open("/dev/leds", O_RDWR);
++	if (fd < 0)
++	   return -1;
++	ioctl(fd, LED_IOCTL_SET_MODE, &leds_dev_ioctl);
++	close(fd);
++
++	return leds_dev_ioctl.mode;
++}
++#endif
++#endif
++
+ typedef int bool;
+ #define true 1
+ #define false 0
+@@ -156,13 +186,30 @@ static void safe_rewind (int fd,const ch
+ /******************************************************************************/
+ 
+ static int dev_fd = -1,fil_fd = -1;
++#if defined(NB4) || defined(NB5)
++static enum led_mode led_mode = -1;
++#endif
+ 
+ static void cleanup (void)
+ {
+ 	if (dev_fd > 0) close (dev_fd);
+ 	if (fil_fd > 0) close (fil_fd);
++#if defined(NB4) || defined(NB5)
++	if ((led_mode >= 0) && (led_mode < led_mode_last))
++		nbd_leds_set_mode(led_mode);
++#endif
+ }
+ 
++#if defined(NB4)
++static uint32_t cc32(uint8_t *pdata, uint32_t size, uint32_t cc)
++{
++	while (size-- > 0)
++		cc = (cc >> 8) ^ Crc32_table[(cc ^ *pdata++) & 0xff];
++
++	return cc;
++}
++#endif
++
+ int main (int argc,char *argv[])
+ {
+ 	const char *progname,*filename = NULL,*device = NULL;
+@@ -234,7 +281,11 @@ int main (int argc,char *argv[])
+ 	}
+ 
+ 	/* get some info about the file we want to copy */
++#if defined(NB4) || defined(NB5)
++	fil_fd = safe_open (filename,O_RDWR);
++#else
+ 	fil_fd = safe_open (filename,O_RDONLY);
++#endif
+ 	if (fstat (fil_fd,&filestat) < 0)
+ 	{
+ 		log_printf (LOG_ERROR,"While trying to get the file status of %s: %m\n",filename);
+@@ -248,12 +299,90 @@ int main (int argc,char *argv[])
+ 		exit (EXIT_FAILURE);
+ 	}
+ 
++#if defined(NB4) || defined(NB5)
++	if (!strcmp(device, "/dev/mtd-main")) {
++#if defined(NB4)
++		FILE_TAG *tag;
++		uint32_t cc;
++
++		tag = mmap(NULL, sizeof(*tag), PROT_WRITE, MAP_SHARED, fil_fd, 0);
++		if (tag == MAP_FAILED) {
++			log_printf(LOG_ERROR, "mmap(%s) failed: %m\n", filename);
++			exit (EXIT_FAILURE);
++		}
++
++		lseek(dev_fd, offsetof(FILE_TAG, net_infra), SEEK_SET);
++		if (read(dev_fd, &tag->net_infra, sizeof(tag->net_infra)) < 0) {
++			log_printf("read(%s) failed %m\n", filename);
++			exit (EXIT_FAILURE);
++		}
++		cc = htonl(cc32(tag, TAG_LEN - TOKEN_LEN, CRC32_INIT_VALUE));
++		memcpy(tag->tagValidationToken, &cc, sizeof(cc));
++		lseek(dev_fd, 0, SEEK_SET);
++
++		msync(tag, sizeof(*tag), MS_SYNC|MS_INVALIDATE);
++		munmap(tag, sizeof(*tag));
++#endif
++	}
++	else if ((filestat.st_size == mtd.size) && !strcmp(device, "/dev/mtd-bootloader")) {
++		void *p;
++		struct serialization *s;
++		off_t off;
++#if defined(NB4)
++		NVRAM_DATA *nv;
++		uint32_t cc;
++#endif
++
++		p = mmap(NULL, NEUFBOX_BOOTLOADER_SIZE, PROT_READ|PROT_WRITE,
++			 MAP_SHARED, fil_fd, 0);
++		if (p == MAP_FAILED) {
++			log_printf(LOG_ERROR, "mmap(%s) failed: %m\n", filename);
++			exit (EXIT_FAILURE);
++		}
++#if defined(NB4)
++		nv = p + NVRAM_DATA_OFFSET;
++		lseek(dev_fd, NVRAM_DATA_OFFSET, SEEK_SET);
++		if (read(dev_fd, nv, sizeof(*nv)) < 0) {
++			log_printf("read(%s) failed %m\n", filename);
++			exit (EXIT_FAILURE);
++		}
++		nv->ulCheckSum = 0;
++		cc = cc32(nv, sizeof(*nv), CRC32_INIT_VALUE);
++		nv->ulCheckSum = htonl(cc);
++
++		off = SERIALIZATION_BASE;
++		s = p + off;
++		lseek(dev_fd, off, SEEK_SET);
++		if (read(dev_fd, s, 40) < 0) {
++			log_printf("read(%s) failed %m\n", filename);
++			exit (EXIT_FAILURE);
++		}
++		lseek(dev_fd, 0, SEEK_SET);
++#endif
++#if defined(NB5)
++		off = NEUFBOX_BOOTLOADER_SIZE - sizeof(*s);
++		s = p + off;
++		lseek(dev_fd, off, SEEK_SET);
++		if (read(dev_fd, s, sizeof(*s)) < 0) {
++			log_printf("read(%s) failed %m\n", filename);
++			exit (EXIT_FAILURE);
++		}
++		lseek(dev_fd, 0, SEEK_SET);
++#endif
++		msync(p, NEUFBOX_BOOTLOADER_SIZE, MS_SYNC|MS_INVALIDATE);
++		munmap(p, NEUFBOX_BOOTLOADER_SIZE);
++	}
++#endif
+ 	/*****************************************************
+ 	 * erase enough blocks so that we can write the file *
+ 	 *****************************************************/
+ 
+ #warning "Check for smaller erase regions"
+ 
++#ifdef HAVE_LIBNBD
++	led_mode = nbd_leds_set_mode(led_mode_burning);
++#endif
++
+ 	erase.start = 0;
+ 	erase.length = (filestat.st_size + mtd.erasesize - 1) / mtd.erasesize;
+ 	erase.length *= mtd.erasesize;

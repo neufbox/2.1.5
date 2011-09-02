@@ -1,0 +1,21 @@
+diff -pruN ushare-1.1a.orig/configure ushare-1.1a/configure
+--- ushare-1.1a.orig/configure	2007-12-09 14:03:36.000000000 +0100
++++ ushare-1.1a/configure	2009-02-20 16:35:19.205567429 +0100
+@@ -130,7 +130,7 @@ append_var(){
+     var=$1
+     shift
+     for f in $@; do
+-      if eval echo \$$var | grep -qv -e "$f"; then
++      if eval echo \$$var | grep -qv -e "$(echo $f | sed -e 's|\.|\\\.|g')"; then
+         eval "$var=\"\$$var $f\""
+       fi
+     done
+@@ -659,7 +659,7 @@ if test "$dlna" = "yes"; then
+     check_cflags -I$libdlnadir
+     check_ldflags -L$libdlnadir
+   fi
+-  check_lib dlna.h dlna_register_all_media_profiles -ldlna || die "Error, can't find libdlna (install it or use --disable-dlna) !"
++  check_lib dlna.h dlna_register_all_media_profiles -ldlna -lavformat -lavcodec -lavutil -lm -lz || die "Error, can't find libdlna (install it or use --disable-dlna) !"
+   check_lib_version libdlna $libdlna_min_version || die "Error, libdlna < $libdlna_min_version !"
+   add_cflags -DHAVE_DLNA
+   add_cflags `pkg-config libdlna --cflags`

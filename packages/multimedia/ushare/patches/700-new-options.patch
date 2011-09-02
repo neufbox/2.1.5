@@ -1,0 +1,153 @@
+diff -pruN ushare-1.1a.orig/src/cfgparser.c ushare-1.1a/src/cfgparser.c
+--- ushare-1.1a.orig/src/cfgparser.c	2008-09-11 11:12:30.000000000 +0200
++++ ushare-1.1a/src/cfgparser.c	2008-09-11 11:40:18.000000000 +0200
+@@ -24,6 +24,7 @@
+ #include <getopt.h>
+ #include <stdbool.h>
+ #include <limits.h>
++#include <errno.h>
+ 
+ #include "config.h"
+ #include "gettext.h"
+@@ -219,6 +220,33 @@ ushare_use_dlna (struct ushare_t *ut, co
+ }
+ 
+ static void
++ushare_set_pid_file (struct ushare_t *ut, const char *file)
++{
++  if (!ut || !file)
++    return;
++	
++  ut->pid_file = strdup (file);
++}
++
++static void
++ushare_set_data_limit (struct ushare_t *ut, const char *limit)
++{
++  long int ilimit = 0;
++  if (!ut || !limit)
++    return;
++  
++  errno = 0;
++  ilimit = strtol(limit, NULL, 10);
++  if(errno != 0)
++  {
++	  log_error("Invalid data limit value, skip it");
++	  return;
++  }
++
++  ut->data_limit = (unsigned int)ilimit;
++}
++
++static void
+ ushare_set_override_iconv_err (struct ushare_t *ut, const char *arg)
+ {
+   if (!ut)
+@@ -243,6 +253,8 @@ static u_configline_t configline[] = {
+   { USHARE_ENABLE_TELNET,        ushare_use_telnet              },
+   { USHARE_ENABLE_XBOX,          ushare_use_xbox                },
+   { USHARE_ENABLE_DLNA,          ushare_use_dlna                },
++  { USHARE_PID_FILE,             ushare_set_pid_file            },
++  { USHARE_DATA_LIMIT,           ushare_set_data_limit          },
+   { NULL,                        NULL                           },
+ };
+ 
+diff -pruN ushare-1.1a.orig/src/cfgparser.h ushare-1.1a/src/cfgparser.h
+--- ushare-1.1a.orig/src/cfgparser.h	2008-09-11 11:12:30.000000000 +0200
++++ ushare-1.1a/src/cfgparser.h	2008-09-11 11:41:06.000000000 +0200
+@@ -33,6 +33,8 @@
+ #define USHARE_ENABLE_TELNET      "USHARE_ENABLE_TELNET"
+ #define USHARE_ENABLE_XBOX        "USHARE_ENABLE_XBOX"
+ #define USHARE_ENABLE_DLNA        "USHARE_ENABLE_DLNA"
++#define USHARE_PID_FILE           "USHARE_PID_FILE"
++#define USHARE_DATA_LIMIT         "USHARE_DATA_LIMIT"
+ 
+ #define USHARE_CONFIG_FILE        "ushare.conf"
+ #define DEFAULT_USHARE_NAME       "uShare"
+diff -pruN ushare-1.1a.orig/src/ushare.c ushare-1.1a/src/ushare.c
+--- ushare-1.1a.orig/src/ushare.c	2008-09-11 11:12:30.000000000 +0200
++++ ushare-1.1a/src/ushare.c	2008-09-11 12:03:44.000000000 +0200
+@@ -27,6 +27,8 @@
+ #include <unistd.h>
+ #include <errno.h>
+ #include <getopt.h>
++#include <sys/time.h>
++#include <sys/resource.h>
+ 
+ #if (defined(BSD) || defined(__FreeBSD__) || defined(__APPLE__))
+ #include <sys/socket.h>
+@@ -124,6 +126,8 @@ ushare_new (void)
+   ut->daemon = false;
+   ut->override_iconv_err = false;
+   ut->cfg_file = NULL;
++  ut->pid_file = NULL;
++  ut->data_limit = 0;
+ #ifdef HAVE_FAM
+   ut->ufam = ufam_init ();
+ #endif /* HAVE_FAM */
+@@ -830,6 +834,8 @@ main (int argc, char **argv)
+   int ret = EXIT_SUCCESS;
+   char buf[32], buf2[32];
+   size_t off;
++  struct rlimit rlim;
++  rlim.rlim_max = RLIM_INFINITY;
+ 
+   ut = ushare_new ();
+   if (!ut)
+@@ -852,6 +857,20 @@ main (int argc, char **argv)
+              ut->cfg_file ? ut->cfg_file : SYSCONFDIR "/" USHARE_CONFIG_FILE);
+   }
+ 
++  if (ut->data_limit > 0)
++  {
++    rlim.rlim_cur = ut->data_limit;
++
++    if(setrlimit(RLIMIT_DATA, &rlim) == 0)
++    {
++      log_info("RLIMIT_DATA set to %u\n", ut->data_limit);
++    }
++    else
++    {
++      log_error("setrlimit failed: %m, continue anyway");
++    }
++  }
++  
+   if (ut->daemon)
+   {
+     /* starting syslog feature as soon as possible */
+@@ -876,6 +881,23 @@ main (int argc, char **argv)
+     display_headers ();
+   }
+ 
++  /* write pidfile if user want to */
++  if (ut->pid_file)
++  {
++    FILE *pidf = fopen(ut->pid_file, "w");
++    pid_t pidt = getpid();
++    if (pidf == NULL)
++    {
++      log_error("Unable to open pidfile `%s' for writing: %s", ut->pid_file,
++		strerror(errno));
++    }
++    else
++    {
++      fprintf(pidf, "%d\n", pidt);
++      fclose(pidf);
++    }
++  }
++
+   /* open nbd socket :) */
+   if(nbd_open() == -1)
+   {
+diff -pruN ushare-1.1a.orig/src/ushare.h ushare-1.1a/src/ushare.h
+--- ushare-1.1a.orig/src/ushare.h	2008-09-11 11:12:30.000000000 +0200
++++ ushare-1.1a/src/ushare.h	2008-09-11 11:40:18.000000000 +0200
+@@ -120,6 +120,8 @@ struct ushare_t {
+   bool daemon;
+   bool override_iconv_err;
+   char *cfg_file;
++  char *pid_file;
++  unsigned int data_limit;
+   pthread_mutex_t termination_mutex;
+   pthread_cond_t termination_cond;
+ #ifdef HAVE_FAM

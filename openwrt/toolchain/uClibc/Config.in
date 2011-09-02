@@ -1,0 +1,22 @@
+# Choose uclibc version.
+
+choice
+	prompt "uClibc Version"
+	depends on TOOLCHAINOPTS && USE_UCLIBC
+	default UCLIBC_VERSION_0_9_29
+	default UCLIBC_VERSION_0_9_30_1 if (TARGET_uml && x86_64)
+	help
+	  Select the version of uClibc you wish to use.
+
+	config UCLIBC_VERSION_0_9_29
+		bool "uClibc 0.9.29"
+
+	config UCLIBC_VERSION_0_9_30_1
+		bool "uClibc 0.9.30.1"
+
+	config UCLIBC_VERSION_NPTL
+		bool "uClibc NPTL branch"
+		depends BROKEN
+
+endchoice
+

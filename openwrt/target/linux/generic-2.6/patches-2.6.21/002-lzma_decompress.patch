@@ -1,0 +1,25 @@
+diff --exclude=.svn -pNur linux-2.6.21.7/lib/Kconfig linux-2.6.21.7/lib/Kconfig
+--- linux-2.6.21.7/lib/Kconfig	2009-02-27 12:03:15.972133927 +0100
++++ linux-2.6.21.7/lib/Kconfig	2009-02-27 12:02:56.588154410 +0100
+@@ -50,6 +50,9 @@ config AUDIT_GENERIC
+ #
+ # compression support is select'ed if needed
+ #
++config LZMA_DECOMPRESS
++	tristate
++
+ config ZLIB_INFLATE
+ 	tristate
+ 
+diff --exclude=.svn -pNur linux-2.6.21.7/lib/Makefile linux-2.6.21.7/lib/Makefile
+--- linux-2.6.21.7/lib/Makefile	2009-02-27 12:03:09.016914693 +0100
++++ linux-2.6.21.7/lib/Makefile	2009-02-27 11:57:34.116373135 +0100
+@@ -48,6 +48,8 @@ obj-$(CONFIG_ZLIB_INFLATE) += zlib_infla
+ obj-$(CONFIG_ZLIB_DEFLATE) += zlib_deflate/
+ obj-$(CONFIG_REED_SOLOMON) += reed_solomon/
+ 
++obj-$(CONFIG_LZMA_DECOMPRESS) += lzma/
++
+ obj-$(CONFIG_TEXTSEARCH) += textsearch.o
+ obj-$(CONFIG_TEXTSEARCH_KMP) += ts_kmp.o
+ obj-$(CONFIG_TEXTSEARCH_BM) += ts_bm.o

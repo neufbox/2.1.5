@@ -1,0 +1,17 @@
+diff -pNur openntpd-3.9p1/client.c openntpd-3.9p1/client.c
+--- openntpd-3.9p1/client.c	2008-11-28 15:12:17.000000000 +0100
++++ openntpd-3.9p1/client.c	2008-11-28 15:57:59.000000000 +0100
+@@ -256,12 +256,7 @@ client_dispatch(struct ntp_peer *p, u_in
+ 	p->reply[p->shift].status.poll = msg.ppoll;
+ 	p->reply[p->shift].status.stratum = msg.stratum;
+ 
+-	if (p->trustlevel < TRUSTLEVEL_PATHETIC)
+-		interval = scale_interval(INTERVAL_QUERY_PATHETIC);
+-	else if (p->trustlevel < TRUSTLEVEL_AGRESSIVE)
+-		interval = scale_interval(INTERVAL_QUERY_AGRESSIVE);
+-	else
+-		interval = scale_interval(INTERVAL_QUERY_NORMAL);
++	interval = scale_interval(INTERVAL_QUERY_AGRESSIVE);
+ 
+ 	set_next(p, interval);
+ 	p->state = STATE_REPLY_RECEIVED;

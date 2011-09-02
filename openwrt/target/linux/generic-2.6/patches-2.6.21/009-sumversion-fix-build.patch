@@ -1,0 +1,10 @@
+--- linux-2.6.21.7/scripts/mod/sumversion.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/scripts/mod/sumversion.c	2008-08-21 01:04:47.000000000 +0200
+@@ -7,6 +7,7 @@
+ #include <ctype.h>
+ #include <errno.h>
+ #include <string.h>
++#include <limits.h>
+ #include "modpost.h"
+ 
+ /*

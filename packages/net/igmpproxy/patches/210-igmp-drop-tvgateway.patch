@@ -1,0 +1,41 @@
+diff -pNur igmpproxy/src/igmp.c igmpproxy/src/igmp.c
+--- igmpproxy/src/igmp.c	2008-11-13 14:39:14.000000000 +0100
++++ igmpproxy/src/igmp.c	2008-11-13 15:20:17.000000000 +0100
+@@ -36,6 +36,8 @@
+ */
+ 
+ #include "defs.h"
++#include <nbd/core.h>
++#include <nbd/status.h>
+  
+ // Globals                  
+ uint32     allhosts_group;          /* All hosts addr in net order */
+@@ -128,6 +130,9 @@ void acceptIgmp(int recvlen) {
+         }
+         else {
+             struct IfDesc *checkVIF;
++#ifdef NB4
++	    char net_tv_gateway[32];
++#endif /* NB4 */
+             
+             // Check if the source address matches a valid address on upstream vif.
+             checkVIF = getIfByIx( upStreamVif );
+@@ -145,7 +150,17 @@ void acceptIgmp(int recvlen) {
+                     inetFmt(src, s1), inetFmt(dst, s2));
+                 return;
+             }
+-            
++           
++#ifdef NB4
++	    nbd_open();
++	    nbd_status_get("net_tv_gateway", net_tv_gateway, sizeof(net_tv_gateway));
++	    nbd_close();
++	    if (strcmp(inetFmt(src, s1), net_tv_gateway) == 0) {
++                log(LOG_DEBUG, 0, "The source address %s for group %s, is TV gateway. Ignoring.",
++                    inetFmt(src, s1), inetFmt(dst, s2));
++                return;
++	    }
++#endif /* NB4 */
+             // Activate the route.
+             IF_DEBUG log(LOG_DEBUG, 0, "Route activate request from %s to %s",
+                          inetFmt(src,s1), inetFmt(dst,s2));

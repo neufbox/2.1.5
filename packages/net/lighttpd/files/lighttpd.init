@@ -1,0 +1,24 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006 OpenWrt.org
+#START=50
+
+BIN=lighttpd
+DEFAULT=/etc/default/$BIN
+LOG_D=/var/log/$BIN
+RUN_D=/var/run
+PID_F=$RUN_D/$BIN.pid
+DOCROOT_D=/var/www-docroot
+
+start() {
+	[ -f $DEFAULT ] && . $DEFAULT
+	mkdir -p $DOCROOT_D/css
+	mkdir -p $DOCROOT_D/preview
+	chown -R admin:admin $DOCROOT_D 2>/dev/null
+	mkdir -p $RUN_D
+	$BIN $OPTIONS
+}
+
+stop() {
+	[ -f $PID_F ] && kill $(cat $PID_F)
+}
+

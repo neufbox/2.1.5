@@ -1,0 +1,176 @@
+--- a/flashcp.c
++++ b/flashcp.c
+@@ -42,6 +42,8 @@
+ #include <mtd/mtd-user.h>
+ #include <getopt.h>
+ 
++#include <linux/reboot.h>
++
+ #if defined(NB4) || defined(NB5)
+ #include <kernel/generic/leds.h>
+ #if defined(NB4)
+@@ -104,6 +106,7 @@ typedef int bool;
+ #define FLAG_HELP		0x02
+ #define FLAG_FILENAME	0x04
+ #define FLAG_DEVICE		0x08
++#define FLAG_REBOOT		0x080
+ 
+ /* error levels */
+ #define LOG_NORMAL	1
+@@ -234,10 +237,11 @@ int main (int argc,char *argv[])
+ 
+ 	for (;;) {
+ 		int option_index = 0;
+-		static const char *short_options = "hv";
++		static const char *short_options = "hvr";
+ 		static const struct option long_options[] = {
+ 			{"help", no_argument, 0, 'h'},
+ 			{"verbose", no_argument, 0, 'v'},
++			{"reboot", no_argument, 0, 'r'},
+ 			{0, 0, 0, 0},
+ 		};
+ 
+@@ -256,6 +260,10 @@ int main (int argc,char *argv[])
+ 				flags |= FLAG_VERBOSE;
+ 				DEBUG("Got FLAG_VERBOSE\n");
+ 				break;
++			case 'r':
++				flags |= FLAG_REBOOT;
++				DEBUG("Got FLAG_REBOOT\n");
++				break;
+ 			default:
+ 				DEBUG("Unknown parameter: %s\n",argv[option_index]);
+ 				showusage (progname,true);
+@@ -282,7 +290,7 @@ int main (int argc,char *argv[])
+ 	{
+ 		DEBUG("ioctl(): %m\n");
+ 		log_printf (LOG_ERROR,"This doesn't seem to be a valid MTD flash device!\n");
+-		exit (EXIT_FAILURE);
++		exit(EXIT_FAILURE);
+ 	}
+ 
+ 	/* get some info about the file we want to copy */
+@@ -294,14 +302,14 @@ int main (int argc,char *argv[])
+ 	if (fstat (fil_fd,&filestat) < 0)
+ 	{
+ 		log_printf (LOG_ERROR,"While trying to get the file status of %s: %m\n",filename);
+-		exit (EXIT_FAILURE);
++		exit(EXIT_FAILURE);
+ 	}
+ 
+ 	/* does it fit into the device/partition? */
+ 	if (filestat.st_size > mtd.size)
+ 	{
+ 		log_printf (LOG_ERROR,"%s won't fit into %s!\n",filename,device);
+-		exit (EXIT_FAILURE);
++		exit(EXIT_FAILURE);
+ 	}
+ 
+ #if defined(NB4) || defined(NB5)
+@@ -313,13 +321,13 @@ int main (int argc,char *argv[])
+ 		tag = mmap(NULL, sizeof(*tag), PROT_WRITE, MAP_SHARED, fil_fd, 0);
+ 		if (tag == MAP_FAILED) {
+ 			log_printf(LOG_ERROR, "mmap(%s) failed: %m\n", filename);
+-			exit (EXIT_FAILURE);
++			exit(EXIT_FAILURE);
+ 		}
+ 
+ 		lseek(dev_fd, offsetof(FILE_TAG, net_infra), SEEK_SET);
+ 		if (read(dev_fd, &tag->net_infra, sizeof(tag->net_infra)) < 0) {
+ 			log_printf("read(%s) failed %m\n", filename);
+-			exit (EXIT_FAILURE);
++			exit(EXIT_FAILURE);
+ 		}
+ 		cc = htonl(cc32(tag, TAG_LEN - TOKEN_LEN, CRC32_INIT_VALUE));
+ 		memcpy(tag->tagValidationToken, &cc, sizeof(cc));
+@@ -342,14 +350,14 @@ int main (int argc,char *argv[])
+ 			 MAP_SHARED, fil_fd, 0);
+ 		if (p == MAP_FAILED) {
+ 			log_printf(LOG_ERROR, "mmap(%s) failed: %m\n", filename);
+-			exit (EXIT_FAILURE);
++			exit(EXIT_FAILURE);
+ 		}
+ #if defined(NB4)
+ 		nv = p + NVRAM_DATA_OFFSET;
+ 		lseek(dev_fd, NVRAM_DATA_OFFSET, SEEK_SET);
+ 		if (read(dev_fd, nv, sizeof(*nv)) < 0) {
+ 			log_printf("read(%s) failed %m\n", filename);
+-			exit (EXIT_FAILURE);
++			exit(EXIT_FAILURE);
+ 		}
+ 		nv->ulCheckSum = 0;
+ 		cc = cc32(nv, sizeof(*nv), CRC32_INIT_VALUE);
+@@ -360,7 +368,7 @@ int main (int argc,char *argv[])
+ 		lseek(dev_fd, off, SEEK_SET);
+ 		if (read(dev_fd, s, 40) < 0) {
+ 			log_printf("read(%s) failed %m\n", filename);
+-			exit (EXIT_FAILURE);
++			exit(EXIT_FAILURE);
+ 		}
+ 		lseek(dev_fd, 0, SEEK_SET);
+ #endif
+@@ -370,7 +378,7 @@ int main (int argc,char *argv[])
+ 		lseek(dev_fd, off, SEEK_SET);
+ 		if (read(dev_fd, s, sizeof(*s)) < 0) {
+ 			log_printf("read(%s) failed %m\n", filename);
+-			exit (EXIT_FAILURE);
++			exit(EXIT_FAILURE);
+ 		}
+ 		lseek(dev_fd, 0, SEEK_SET);
+ #endif
+@@ -407,7 +415,7 @@ int main (int argc,char *argv[])
+ 				log_printf (LOG_ERROR,
+ 						"While erasing blocks 0x%.8x-0x%.8x on %s: %m\n",
+ 						(unsigned int) erase.start,(unsigned int) (erase.start + erase.length),device);
+-				exit (EXIT_FAILURE);
++				goto failed;
+ 			}
+ 			erase.start += mtd.erasesize;
+ 		}
+@@ -421,7 +429,7 @@ int main (int argc,char *argv[])
+ 			log_printf (LOG_ERROR,
+ 					"While erasing blocks from 0x%.8x-0x%.8x on %s: %m\n",
+ 					(unsigned int) erase.start,(unsigned int) (erase.start + erase.length),device);
+-			exit (EXIT_FAILURE);
++			goto failed;
+ 		}
+ 	}
+ 	DEBUG("Erased %u / %luk bytes\n",erase.length,filestat.st_size);
+@@ -456,12 +464,12 @@ int main (int argc,char *argv[])
+ 				log_printf (LOG_ERROR,
+ 						"While writing data to 0x%.8x-0x%.8x on %s: %m\n",
+ 						written,written + i,device);
+-				exit (EXIT_FAILURE);
++				goto failed;
+ 			}
+ 			log_printf (LOG_ERROR,
+ 					"Short write count returned while writing to x%.8x-0x%.8x on %s: %d/%lu bytes written to flash\n",
+ 					written,written + i,device,written + result,filestat.st_size);
+-			exit (EXIT_FAILURE);
++			goto failed;
+ 		}
+ 
+ 		written += i;
+@@ -506,7 +514,7 @@ int main (int argc,char *argv[])
+ 			log_printf (LOG_ERROR,
+ 					"File does not seem to match flash data. First mismatch at 0x%.8x-0x%.8x\n",
+ 					written,written + i);
+-			exit (EXIT_FAILURE);
++			goto failed;
+ 		}
+ 
+ 		written += i;
+@@ -519,6 +527,13 @@ int main (int argc,char *argv[])
+ 				KB (filestat.st_size));
+ 	DEBUG("Verified %d / %luk bytes\n",written,filestat.st_size);
+ 
++	if (flags & FLAG_REBOOT)
++		reboot(LINUX_REBOOT_CMD_RESTART);
+ 	exit (EXIT_SUCCESS);
++
++failed:
++	if (flags & FLAG_REBOOT)
++		reboot(LINUX_REBOOT_CMD_RESTART);
++	exit (EXIT_FAILURE);
+ }
+ 

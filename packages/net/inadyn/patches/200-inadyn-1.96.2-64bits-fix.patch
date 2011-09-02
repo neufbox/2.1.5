@@ -1,0 +1,54 @@
+diff -pNur inadyn-v1.96.2/src/ip.c inadyn-v1.96.2.sav/src/ip.c
+--- inadyn-v1.96.2/src/ip.c	2008-08-07 12:33:59.000000000 +0200
++++ inadyn-v1.96.2.sav/src/ip.c	2008-08-07 12:33:49.000000000 +0200
+@@ -138,7 +138,7 @@ RC_TYPE ip_initialize(IP_SOCKET *p_self)
+ 		/*remote addres */
+ 		if (p_self->p_remote_host_name != NULL)
+ 		{
+-            unsigned long addr = 0;
++            		uint32_t addr = 0;
+ 			HOSTENT* p_remotehost = (HOSTENT*) gethostbyname(p_self->p_remote_host_name);
+ 			if (p_remotehost == NULL)
+ 			{                
+@@ -111,7 +157,7 @@ RC_TYPE ip_initialize(IP_SOCKET *p_self)
+ 			p_self->remote_addr.sin_family = AF_INET;
+ 			p_self->remote_addr.sin_port = htons(p_self->port); 
+ 			p_self->remote_addr.sin_addr.s_addr = (addr == 0) ?
+-                    *((unsigned long *)p_remotehost->h_addr_list[0]) : addr; 
++                    *((uint32_t *)p_remotehost->h_addr_list[0]) : addr; 
+ 		}
+ 	}
+ 	while(0);
+diff -pNur inadyn-v1.96.2/src/os.c inadyn-v1.96.2.sav/src/os.c
+--- inadyn-v1.96.2/src/os.c	2005-02-22 23:16:58.000000000 +0100
++++ inadyn-v1.96.2.sav/src/os.c	2008-08-07 12:33:49.000000000 +0200
+@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suit
+ /*
+     returns the inet addr of a char* begining with an IP address: "nnn.nnn.nnn.nnn"
+ */
+-RC_TYPE os_convert_ip_to_inet_addr(unsigned long *p_addr, const char *p_name)
++RC_TYPE os_convert_ip_to_inet_addr(unsigned int *p_addr, const char *p_name)
+ {
+     RC_TYPE rc = RC_OK;
+ 
+@@ -43,7 +43,7 @@ RC_TYPE os_convert_ip_to_inet_addr(unsig
+         unsigned int b2;
+         unsigned int b1;
+         unsigned int b0;
+-        unsigned long ipa;
++        unsigned int ipa;
+         int n;
+ 
+         ipa = 0x0;
+diff -pNur inadyn-v1.96.2/src/os.h inadyn-v1.96.2.sav/src/os.h
+--- inadyn-v1.96.2/src/os.h	2005-07-19 00:49:48.000000000 +0200
++++ inadyn-v1.96.2.sav/src/os.h	2008-08-07 12:33:49.000000000 +0200
+@@ -165,7 +165,7 @@ RC_TYPE os_install_signal_handler(void*)
+ /*
+     returns the inet addr of a char* begining with an IP address: "nnn.nnn.nnn.nnn"
+ */
+-RC_TYPE os_convert_ip_to_inet_addr(unsigned long *p_addr, const char *p_name);
++RC_TYPE os_convert_ip_to_inet_addr(unsigned int *p_addr, const char *p_name);
+ 
+ /* MAIN - Dyn DNS update entry point.*/
+ int inadyn_main(int argc, char* argv[]);

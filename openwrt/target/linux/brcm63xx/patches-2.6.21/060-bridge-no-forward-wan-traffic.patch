@@ -1,0 +1,17 @@
+diff -pNur linux-2.6.21.7/net/bridge/br_forward.c linux-2.6.21.7/net/bridge/br_forward.c
+--- linux-2.6.21.7/net/bridge/br_forward.c	2008-11-18 09:36:11.000000000 +0100
++++ linux-2.6.21.7/net/bridge/br_forward.c	2008-11-18 09:40:57.000000000 +0100
+@@ -24,6 +24,13 @@
+ static inline int should_deliver(const struct net_bridge_port *p,
+ 				 const struct sk_buff *skb)
+ {
++	/*
++	 * Do not forward any packets received from one WAN interface 
++	 * to other WAN interfaces in multiple PVC case
++	 */
++        if( (skb->dev->priv_flags & p->dev->priv_flags) & IFF_WANDEV )
++           return 0;
++
+ 	return (skb->dev != p->dev && p->state == BR_STATE_FORWARDING);
+ }
+ 

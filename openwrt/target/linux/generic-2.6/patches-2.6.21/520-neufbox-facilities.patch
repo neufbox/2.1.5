@@ -1,0 +1,35 @@
+diff -pNur linux-2.6.21.7/drivers/char/Kconfig linux-2.6.21.7/drivers/char/Kconfig
+--- linux-2.6.21.7/drivers/char/Kconfig	2008-07-22 09:36:12.000000000 +0200
++++ linux-2.6.21.7/drivers/char/Kconfig	2008-07-22 11:03:21.000000000 +0200
+@@ -1069,5 +1069,18 @@ config TELCLOCK
+ 	  /sys/devices/platform/telco_clock, with a number of files for
+ 	  controlling the behavior of this hardware.
+ 
++config NEUFBOX_RING_BUFFER
++	tristate "Enable support for Neufbox 5 logs"
++	default "y"
++	help
++	  This option enables Neufbox 5 logs support.
++
++config NEUFBOX_EVENTS
++	tristate "Enable support for Neufbox event queue"
++	default "y"
++	help
++	  This option enables Neufbox events support.
++	  This module send event like adsl up/down or usb link to userland
++
+ endmenu
+ 
+diff -pNur linux-2.6.21.7/drivers/char/Makefile char/Makefile
+--- linux-2.6.21.7/drivers/char/Makefile	2008-06-16 15:12:00.000000000 +0200
++++ linux-2.6.21.7/drivers/char/Makefile	2008-06-16 17:34:24.000000000 +0200
+@@ -107,6 +107,9 @@ obj-$(CONFIG_IPMI_HANDLER)	+= ipmi/
+ obj-$(CONFIG_HANGCHECK_TIMER)	+= hangcheck-timer.o
+ obj-$(CONFIG_TCG_TPM)		+= tpm/
+ 
++obj-$(CONFIG_NEUFBOX_RING_BUFFER) += neufbox-ring-buffer.o
++obj-$(CONFIG_NEUFBOX_EVENTS) += neufbox-eventqueue.o
++
+ # Files generated that shall be removed upon make clean
+ clean-files := consolemap_deftbl.c defkeymap.c
+ 

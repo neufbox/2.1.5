@@ -1,0 +1,12 @@
+#!/bin/sh
+
+BR=`nvram get lan_ifname`
+
+
+for MAC in `cat /proc/net/arp | grep $BR | awk '{ print $4 }'`
+do
+	IP=`cat /proc/net/arp | grep $MAC | awk /$BR/'{ print $1 }'`
+	IFACE=`brctl getif br0 $MAC`
+
+	echo "$IP with $MAC connected on port $IFACE of $BR"
+done

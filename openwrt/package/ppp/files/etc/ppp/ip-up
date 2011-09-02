@@ -1,0 +1,62 @@
+#!/bin/sh
+# This file should not be modified -- make local changes to
+# /etc/ppp/ip-up.local instead
+
+echo "Setting on "$IFNAME > /dev/console
+#echo "Using only 85% of bandwith" > /dev/console
+
+
+PPP_MODE=`status get ppp_mode`
+
+# Disable Timeout if ppp in adsl mode
+[ "$PPP_MODE" = "adsl" ] && backup3g stop data
+
+if [ "$PPP_MODE" = "gprs" ]
+then
+	/etc/init.d/rc.qos deinit
+	status set gprs_active_data on
+	backup3g session_started
+	killall -USR1 udhcpc
+fi
+
+/etc/init.d/route ppp-up $IPLOCAL $IPREMOTE $IFNAME $DNS1 $DNS2
+
+# update status
+status set net_data_ifname "$IFNAME"
+status set net_data_ipaddr "$IPLOCAL"
+status set net_data_gateway "$IPREMOTE"
+status set net_data_dns "$DNS1 $DNS2"
+status set net_data_status "up"
+event notify 'data-up'
+
+status set ppp_session "`cat /var/ppp/pppoe_session`"
+status set ppp_server "`cat /var/ppp/pppoe_server`"
+# NOTE: this give a chance for VOIP in option 3
+status set ppp_ifname "$IFNAME"
+status set ppp_ipaddr "$IPLOCAL"
+status set ppp_gateway "$IPREMOTE"
+status set ppp_dns "$DNS1 $DNS2"
+status set ppp_status "up"
+status set ppp_fail "0"
+event notify 'ppp-up'
+
+# setup filter
+iptables -A INPUT -i $IFNAME -p icmp -j ICMP_FILTER
+iptables -A FORWARD -i $IFNAME -m state --state NEW -j WIN_FILTER
+iptables -A FORWARD -o $IFNAME -m state --state NEW -j WIN_FILTER
+iptables -A FORWARD -o $IFNAME -p tcp -m tcp --dport 25 -j SMTP_FILTER
+
+if [ "$PPP_MODE" = "adsl" ]
+then
+	# add source nat for hotspot
+	HOTSPOT_NET=`nvram get hotspot_net`
+	iptables -t nat -A POSTROUTING -s $HOTSPOT_NET -o $IFNAME -j SNAT --to $IPLOCAL
+	# Do some QoS (for femto)
+	/etc/init.d/rc.qos femto
+else
+	# Enable ntp in backup
+	nbctl async_run /etc/init.d/ntpd restart
+fi
+logger -s -t PPP_STATUS -p local1.info "PPP UP :)"
+
+exit 0

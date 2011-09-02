@@ -1,0 +1,2 @@
+config HOSTNAME
+	string "hostname"

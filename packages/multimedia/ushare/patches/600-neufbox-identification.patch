@@ -1,0 +1,201 @@
+--- ushare-1.1a.orig/src/ushare.c	2009-02-05 17:07:07.041845354 +0100
++++ ushare-1.1a/src/ushare.c	2009-02-06 11:32:06.966323807 +0100
+@@ -94,6 +94,8 @@
+   ut->name = strdup (DEFAULT_USHARE_NAME);
+   ut->interface = strdup (DEFAULT_USHARE_IFACE);
+   ut->model_name = strdup (DEFAULT_USHARE_NAME);
++  ut->model_number = NULL;
++  ut->serial_number = NULL;
+   ut->contentlist = NULL;
+   ut->rb = rbinit (rb_compare, NULL);
+   ut->root_entry = NULL;
+@@ -144,6 +146,10 @@ ushare_free (struct ushare_t *ut)
+     free (ut->interface);
+   if (ut->model_name)
+     free (ut->model_name);
++  if (ut->model_number)
++    free (ut->model_number);
++  if (ut->serial_number)
++    free (ut->serial_number);
+   if (ut->contentlist)
+     content_free (ut->contentlist);
+   if (ut->rb)
+@@ -307,13 +313,13 @@ init_upnp (struct ushare_t *ut)
+     len = 0;
+     description =
+       dlna_dms_description_get (ut->name,
+-                                "GeeXboX Team",
+-                                "http://ushare.geexbox.org/",
+-                                "uShare : DLNA Media Server",
++                                "SFR",
++                                "http://www.sfr.fr/",
++                                "neufbox DLNA Media Server (uShare)",
+                                 ut->model_name,
+-                                "001",
+-                                "http://ushare.geexbox.org/",
+-                                "USHARE-01",
++                                ut->model_number,
++                                "http://www.efixo.com/neufbox4/",
++                                ut->serial_number,
+                                 ut->udn,
+                                 "/web/ushare.html",
+                                 "/web/cms.xml",
+@@ -334,10 +334,15 @@
+   {
+ #endif /* HAVE_DLNA */ 
+   len = strlen (UPNP_DESCRIPTION) + strlen (ut->name)
+-    + strlen (ut->model_name) + strlen (ut->udn) + 1;
++    + strlen (ut->model_name) + strlen (ut->udn) 
++    + strlen (ut->model_number) + strlen(ut->serial_number)
++    + 1;
+   description = (char *) malloc (len * sizeof (char));
+   memset (description, 0, len);
+-  sprintf (description, UPNP_DESCRIPTION, ut->name, ut->model_name, ut->udn);
++  sprintf (description, 
++	   UPNP_DESCRIPTION, 
++	   ut->name, ut->model_name, ut->model_number, 
++	   ut->serial_number, ut->udn);
+ #ifdef HAVE_DLNA
+   }
+ #endif /* HAVE_DLNA */
+@@ -819,6 +828,8 @@ int
+ main (int argc, char **argv)
+ {
+   int ret = EXIT_SUCCESS;
++  char buf[32], buf2[32];
++  size_t off;
+ 
+   ut = ushare_new ();
+   if (!ut)
+@@ -841,19 +853,6 @@
+              ut->cfg_file ? ut->cfg_file : SYSCONFDIR "/" USHARE_CONFIG_FILE);
+   }
+ 
+-  if (ut->xbox360)
+-  {
+-    char *name;
+-
+-    name = malloc (strlen (XBOX_MODEL_NAME) + strlen (ut->model_name) + 4);
+-    sprintf (name, "%s (%s)", XBOX_MODEL_NAME, ut->model_name);
+-    free (ut->model_name);
+-    ut->model_name = strdup (name);
+-    free (name);
+-
+-    ut->starting_id = STARTING_ENTRY_ID_XBOX360;
+-  }
+-
+   if (ut->daemon)
+   {
+     /* starting syslog feature as soon as possible */
+@@ -886,6 +897,79 @@ main (int argc, char **argv)
+     return EXIT_FAILURE;
+   }
+   
++  /* compute modelName, modelNumber and serialNumber */
++  
++  /* modelName is based on productID */
++  if(nbd_status_get("productID", buf, sizeof(buf)) == 0)
++  {
++    ut->model_name = strdup(buf);
++  }
++  else
++  {
++    log_error("Unable to get productID\n");
++    ushare_free(ut);
++    return EXIT_FAILURE;
++  }
++  
++  /* modelNumber is based on version of mainfirmware */
++  if(nbd_status_get("version_mainfirmware", buf, sizeof(buf)) == 0)
++  {
++    if(sscanf(buf, 
++	      "%*[^-]-%*[^-]-R%[^-]", 
++	      buf2) == 1)
++    {
++      ut->model_number = strdup(buf2);
++    }
++    else
++    {
++      log_error("Unable to compute number version on version_firmware");
++      ut->model_number = strdup(buf);
++    }
++  }
++  else
++  {
++    log_error("Unable to get version_mainfirmware\n");
++    ushare_free(ut);
++    return EXIT_FAILURE;
++  }
++
++  /* serialNumber is based on productID and mac address */
++  if(nbd_status_get("mac_addr", buf, sizeof(buf)) == 0
++     && nbd_status_get("productID", buf2, sizeof(buf2)) == 0)
++  {
++    for(off = 0; off < strlen(buf); off++)
++    {
++      if(buf[off] == ':')
++      {
++	buf[off] = '-';
++      }
++    }
++    
++    strncat(buf2, "-", sizeof(buf2));
++    strncat(buf2, buf, sizeof(buf2));
++
++    ut->serial_number = strdup(buf2);
++  }
++  else
++  {
++    log_error("Unable to get mac_addr\n");
++    ushare_free(ut);
++    return EXIT_FAILURE;
++  }
++  
++  if (ut->xbox360)
++  {
++    char *name;
++
++    name = malloc (strlen (XBOX_MODEL_NAME) + strlen (ut->model_name) + 4);
++    sprintf (name, "%s (%s)", XBOX_MODEL_NAME, ut->model_name);
++    free (ut->model_name);
++    ut->model_name = strdup (name);
++    free (name);
++
++    ut->starting_id = STARTING_ENTRY_ID_XBOX360;
++  }
++
+   /* update nbd status */
+   nbd_status_set("ushare_status", "starting");
+   nbd_status_set("ushare_sharedcount", "0");
+diff -pruN ushare-1.1a.orig/src/ushare.h ushare-1.1a/src/ushare.h
+--- ushare-1.1a.orig/src/ushare.h	2009-02-05 17:07:07.041845354 +0100
++++ ushare-1.1a/src/ushare.h	2009-02-06 10:14:05.694740510 +0100
+@@ -54,13 +61,13 @@
+ "  <device>" \
+ "    <deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>" \
+ "    <friendlyName>%s: 1</friendlyName>" \
+-"    <manufacturer>GeeXboX Team</manufacturer>" \
+-"    <manufacturerURL>http://ushare.geexbox.org/</manufacturerURL>" \
+-"    <modelDescription>GeeXboX uShare : UPnP Media Server</modelDescription>" \
++"    <manufacturer>SFR</manufacturer>" \
++"    <manufacturerURL>http://www.sfr.fr/</manufacturerURL>" \
++"    <modelDescription>neufbox UPnP Media Server (uShare)</modelDescription>" \
+ "    <modelName>%s</modelName>" \
+-"    <modelNumber>001</modelNumber>" \
+-"    <modelURL>http://ushare.geexbox.org/</modelURL>" \
+-"    <serialNumber>GEEXBOX-USHARE-01</serialNumber>" \
++"    <modelNumber>%s</modelNumber>" \
++"    <modelURL>http://www.efixo.com/neufbox4/</modelURL>" \
++"    <serialNumber>%s</serialNumber>" \
+ "    <UDN>uuid:%s</UDN>" \
+ "    <serviceList>" \
+ "      <service>" \
+@@ -93,6 +100,8 @@ struct ushare_t {
+   char *name;
+   char *interface;
+   char *model_name;
++  char *model_number;
++  char *serial_number;
+   content_list *contentlist;
+   struct rbtree *rb;
+   struct upnp_entry_t *root_entry;

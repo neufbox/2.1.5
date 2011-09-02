@@ -1,0 +1,22 @@
+diff -pNur syslog-ng-1.6.12/src/affile.c syslog-ng-1.6.12/src/affile.c
+--- syslog-ng-1.6.12/src/affile.c	2008-11-21 18:33:47.000000000 +0100
++++ syslog-ng-1.6.12/src/affile.c	2008-11-21 18:36:00.000000000 +0100
+@@ -131,6 +131,7 @@ static int do_open_file(struct ol_string
+ 		chown((char *) name->data, uid, -1);
+ 	if (gid != -1)
+ 		chown((char *) name->data, -1, gid);
++	mode = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
+ 	if (mode != -1)
+ 		chmod((char *) name->data, mode);
+ 	return *fd != -1;
+diff -pNur syslog-ng-1.6.12/src/afunix.c syslog-ng-1.6.12/src/afunix.c
+--- syslog-ng-1.6.12/src/afunix.c	2008-11-21 18:33:46.000000000 +0100
++++ syslog-ng-1.6.12/src/afunix.c	2008-11-21 18:36:34.000000000 +0100
+@@ -226,6 +226,7 @@ int do_init_afunix_source(struct log_han
+ 	}
+ 
+ 	chown((char *) unix_addr->path->data, self->uid, self->gid);
++	self->perm = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
+ 	chmod((char *) unix_addr->path->data, self->perm);
+ 
+ 	switch (self->super.flags & 0x0003) {

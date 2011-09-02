@@ -1,0 +1,41 @@
+diff -pNur busybox-1.11.2/libbb/login.c busybox-1.11.2/libbb/login.c
+--- busybox-1.11.2/libbb/login.c	2008-09-25 11:11:04.000000000 +0200
++++ busybox-1.11.2/libbb/login.c	2008-09-25 11:10:17.000000000 +0200
+@@ -86,11 +86,36 @@ void print_login_issue(const char *issue
+ 	fflush(stdout);
+ }
+ 
++static void print_neufbox_motd(void)
++{
++	FILE *file;
++	char *motd = NULL;
++	size_t n = 0;
++
++	file = fopen("/tmp/motd", "r");
++	if (!file) {
++		return;
++	}
++	getline(&motd, &n, file);
++	fclose(file);
++	if (motd) {
++		printf("%s\n", motd);
++		free(motd);
++	}
++}
++
+ void print_login_prompt(void)
+ {
+ 	char *hostname = safe_gethostname();
+ 
++	print_neufbox_motd();
++
++#ifdef NB4
++	/* Need this to keep compatibility with kit */
++	fputs("Lost", stdout);
++#else
+ 	fputs(hostname, stdout);
++#endif /* NB4 */
+ 	fputs(LOGIN, stdout);
+ 	fflush(stdout);
+ 	free(hostname);
+

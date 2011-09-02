@@ -1,0 +1,13 @@
+diff --exclude=.svn -pNur linux-2.6.21.7/drivers/mtd/chips/cfi_cmdset_0002.c linux-2.6.21.7/drivers/mtd/chips/cfi_cmdset_0002.c
+--- linux-2.6.21.7/drivers/mtd/chips/cfi_cmdset_0002.c	2009-02-03 11:10:19.635764896 +0100
++++ linux-2.6.21.7/drivers/mtd/chips/cfi_cmdset_0002.c	2009-02-03 18:51:15.907769886 +0100
+@@ -589,6 +595,9 @@ static int get_chip(struct map_info *map
+ 		return 0;
+ 
+ 	case FL_ERASING:
++		/* neufbox: never suspend on erasing */		
++		goto sleep;
++
+ 		if (mode == FL_WRITING) /* FIXME: Erase-suspend-program appears broken. */
+ 			goto sleep;
+ 

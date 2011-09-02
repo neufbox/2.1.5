@@ -1,0 +1,18 @@
+#!/bin/sh
+
+
+case "$1" in
+
+	adsl|ftth|mediafibre)
+		nbctl net_infra $1
+		;;
+	
+	*)
+		echo "Usage: $0 {adsl|ftth|mediafibre}"
+		exit 1
+		;;
+
+esac
+
+exit 0
+

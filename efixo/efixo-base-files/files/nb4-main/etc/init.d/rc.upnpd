@@ -1,0 +1,54 @@
+#!/bin/sh
+
+NAME="upnpd"
+DESC="UPnP Daemon"
+DAEMON="/sbin/upnpd"
+#PID=`ps -C $NAME -o pid=`
+
+upnpd_active=`nvram get upnpd_active`
+lan_ifname=`nvram get lan_ifname`
+ppp_ifname=`status get ppp_ifname`
+IPTABLES=iptables
+start () {
+	if [ "$upnpd_active" = "on" ]
+	then
+		route add -net 239.0.0.0 netmask 255.0.0.0 "$lan_ifname"
+		$DAEMON "$ppp_ifname" "$lan_ifname"
+		$IPTABLES -A INPUT -i $lan_ifname -p udp -m udp --dport 1900 -m state --state NEW -j ACCEPT	
+		$IPTABLES -A INPUT -i $lan_ifname -p tcp -m tcp --dport 49152 -m state --state NEW -j ACCEPT	
+	fi
+}
+
+stop () {
+	route del -net 239.0.0.0 netmask 255.0.0.0 "$lan_ifname"
+	killall -9 $NAME
+	$IPTABLES -D INPUT -i $lan_ifname -p udp -m udp --dport 1900 -m state --state NEW -j ACCEPT	
+	$IPTABLES -D INPUT -i $lan_ifname -p tcp -m tcp --dport 49152 -m state --state NEW -j ACCEPT	
+
+}
+
+
+case "$1" in 
+
+	start)
+		start
+		exit 0
+		;;
+
+	stop)
+		stop
+		exit 0
+		;;
+
+	restart)
+		stop
+		start
+		exit 0
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+
+esac

@@ -1,0 +1,162 @@
+--- linux-2.6.21.7/arch/mips/kernel/early_printk.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/kernel/early_printk.c	2009-01-23 17:00:19.449107163 +0100
+@@ -10,9 +10,12 @@
+ #include <linux/console.h>
+ #include <linux/init.h>
+ 
++#include <asm/setup.h>
++
+ extern void prom_putchar(char);
+ 
+-static void early_console_write(struct console *con, const char *s, unsigned n)
++static void __init
++early_console_write(struct console *con, const char *s, unsigned n)
+ {
+ 	while (n-- && *s) {
+ 		if (*s == '\n')
+@@ -22,19 +25,20 @@ static void early_console_write(struct c
+ 	}
+ }
+ 
+-static struct console early_console = {
++static struct console early_console __initdata = {
+ 	.name	= "early",
+ 	.write	= early_console_write,
+ 	.flags	= CON_PRINTBUFFER | CON_BOOT,
+ 	.index	= -1
+ };
+ 
++static int early_console_initialized __initdata;
++
+ void __init setup_early_printk(void)
+ {
+-	register_console(&early_console);
+-}
++	if (early_console_initialized)
++		return;
++	early_console_initialized = 1;
+ 
+-void __init disable_early_printk(void)
+-{
+-	unregister_console(&early_console);
++	register_console(&early_console);
+ }
+--- linux-2.6.21.7/drivers/char/tty_io.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/drivers/char/tty_io.c	2009-01-23 14:24:36.653025137 +0100
+@@ -141,8 +141,6 @@ static DECLARE_MUTEX(allocated_ptys_lock
+ static int ptmx_open(struct inode *, struct file *);
+ #endif
+ 
+-extern void disable_early_printk(void);
+-
+ static void initialize_tty_struct(struct tty_struct *tty);
+ 
+ static ssize_t tty_read(struct file *, char __user *, size_t, loff_t *);
+@@ -3899,9 +3897,6 @@ void __init console_init(void)
+ 	 * set up the console device so that later boot sequences can 
+ 	 * inform about problems etc..
+ 	 */
+-#ifdef CONFIG_EARLY_PRINTK
+-	disable_early_printk();
+-#endif
+ 	call = __con_initcall_start;
+ 	while (call < __con_initcall_end) {
+ 		(*call)();
+--- linux-2.6.21.7/kernel/printk.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/kernel/printk.c	2009-01-23 16:52:23.513023651 +0100
+@@ -68,6 +68,8 @@ EXPORT_SYMBOL(oops_in_progress);
+ static DECLARE_MUTEX(console_sem);
+ static DECLARE_MUTEX(secondary_console_sem);
+ struct console *console_drivers;
++EXPORT_SYMBOL_GPL(console_drivers);
++
+ /*
+  * This is used for debugging the mess that is the VT code by
+  * keeping track if we have the console semaphore held. It's
+@@ -931,10 +933,21 @@ void register_console(struct console *co
+ {
+ 	int i;
+ 	unsigned long flags;
++	struct console *bootconsole = NULL;
+ 
+-	if (preferred_console < 0)
+-		preferred_console = selected_console;
++	if (console_drivers) {
++		if (console->flags & CON_BOOT)
++			return;
++		if (console_drivers->flags & CON_BOOT)
++			bootconsole = console_drivers;
++	}
+ 
++	if (preferred_console < 0 || bootconsole || !console_drivers)
++		preferred_console = selected_console;
++#if 0
++	if (console->early_setup)
++		console->early_setup();
++#endif
+ 	/*
+ 	 *	See if we want to use this console driver. If we
+ 	 *	didn't select a console we take the first one
+@@ -945,8 +958,11 @@ void register_console(struct console *co
+ 			console->index = 0;
+ 		if (console->setup == NULL ||
+ 		    console->setup(console, NULL) == 0) {
+-			console->flags |= CON_ENABLED | CON_CONSDEV;
+-			preferred_console = 0;
++			console->flags |= CON_ENABLED;
++			if (console->device) {
++				console->flags |= CON_CONSDEV;
++				preferred_console = 0;
++			}
+ 		}
+ 	}
+ 
+@@ -978,9 +994,15 @@ void register_console(struct console *co
+ 	if (!(console->flags & CON_ENABLED))
+ 		return;
+ 
+-	if (console_drivers && (console_drivers->flags & CON_BOOT)) {
+-		unregister_console(console_drivers);
++	if (bootconsole && (console->flags & CON_CONSDEV)) {
++		printk(KERN_INFO "console handover: boot [%s%d] -> real [%s%d]\n",
++		       bootconsole->name, bootconsole->index,
++		       console->name, console->index);
++		unregister_console(bootconsole);
+ 		console->flags &= ~CON_PRINTBUFFER;
++	} else {
++		printk(KERN_INFO "console [%s%d] enabled\n",
++		       console->name, console->index);
+ 	}
+ 
+ 	/*
+@@ -1037,9 +1059,7 @@ int unregister_console(struct console *c
+ 	 * If this isn't the last console and it has CON_CONSDEV set, we
+ 	 * need to set it on the next preferred console.
+ 	 */
+-	if (console_drivers == NULL)
+-		preferred_console = selected_console;
+-	else if (console->flags & CON_CONSDEV)
++	if (console_drivers != NULL && console->flags & CON_CONSDEV)
+ 		console_drivers->flags |= CON_CONSDEV;
+ 
+ 	release_console_sem();
+@@ -1047,6 +1067,19 @@ int unregister_console(struct console *c
+ }
+ EXPORT_SYMBOL(unregister_console);
+ 
++static int __init disable_boot_consoles(void)
++{
++	if (console_drivers != NULL) {
++		if (console_drivers->flags & CON_BOOT) {
++			printk(KERN_INFO "turn off boot console %s%d\n",
++				console_drivers->name, console_drivers->index);
++			return unregister_console(console_drivers);
++		}
++	}
++	return 0;
++}
++late_initcall(disable_boot_consoles);
++
+ /**
+  * tty_write_message - write a message to a certain tty, not just the console.
+  * @tty: the destination tty_struct

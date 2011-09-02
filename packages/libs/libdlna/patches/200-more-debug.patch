@@ -1,0 +1,25 @@
+diff -pruN libdlna-0.2.3.orig/src/profiles.c libdlna-0.2.3/src/profiles.c
+--- libdlna-0.2.3.orig/src/profiles.c	2008-11-05 14:53:21.000000000 +0100
++++ libdlna-0.2.3/src/profiles.c	2008-11-05 14:54:24.000000000 +0100
+@@ -273,17 +273,18 @@ dlna_guess_media_profile (dlna_t *dlna, 
+   dlna_profile_t *profile = NULL;
+   dlna_container_type_t st;
+   av_codecs_t *codecs;
+-
++  int err;
++  
+   if (!dlna)
+     return NULL;
+   
+   if (!dlna->inited)
+     dlna = dlna_init ();
+   
+-  if (av_open_input_file (&ctx, filename, NULL, 0, NULL) != 0)
++  if ((err = av_open_input_file (&ctx, filename, NULL, 0, NULL)) != 0)
+   {
+     if (dlna->verbosity)
+-      fprintf (stderr, "can't open file: %s\n", filename);
++	    fprintf (stderr, "can't open file: %s (AVERROR= %d - %s)\n", filename, err, strerror(-err));
+     return NULL;
+   }
+ 

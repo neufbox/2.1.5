@@ -1,0 +1,11 @@
+--- a/Makefile
++++ b/Makefile
+@@ -114,7 +114,7 @@ $(EXEC): $(OBJS) $(HDRS)
+ 
+ pfc:
+ 	$(CC) $(CFLAGS) -c contrib/pfc.c
+-	$(CC) $(LDFLAGS) -lpcap $(LDLIBS) -o pfc pfc.o
++	$(CC) $(LDFLAGS) $(LDLIBS) -o pfc pfc.o -lpcap
+ 
+ romfs:
+ 	$(ROMFSINST) /bin/$(EXEC)

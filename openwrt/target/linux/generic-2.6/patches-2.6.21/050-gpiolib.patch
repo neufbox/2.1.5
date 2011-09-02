@@ -1,0 +1,23 @@
+diff -pNur linux-2.6.21.7/drivers/Kconfig linux-2.6.21.7/drivers/Kconfig
+--- linux-2.6.21.7/drivers/Kconfig	2008-10-15 14:34:14.000000000 +0200
++++ linux-2.6.21.7/drivers/Kconfig	2008-10-15 15:13:08.000000000 +0200
+@@ -52,6 +52,8 @@ source "drivers/i2c/Kconfig"
+ 
+ source "drivers/spi/Kconfig"
+ 
++source "drivers/gpio/Kconfig"
++
+ source "drivers/w1/Kconfig"
+ 
+ source "drivers/hwmon/Kconfig"
+diff -pNur linux-2.6.21.7/drivers/Makefile linux-2.6.21.7/drivers/Makefile
+--- linux-2.6.21.7/drivers/Makefile	2008-10-15 14:34:00.000000000 +0200
++++ linux-2.6.21.7/drivers/Makefile	2008-10-15 15:13:27.000000000 +0200
+@@ -5,6 +5,7 @@
+ # Rewritten to use lists instead of if-statements.
+ #
+ 
++obj-$(CONFIG_HAVE_GPIO_LIB)	+= gpio/
+ obj-$(CONFIG_PCI)		+= pci/
+ obj-$(CONFIG_PARISC)		+= parisc/
+ obj-$(CONFIG_RAPIDIO)		+= rapidio/

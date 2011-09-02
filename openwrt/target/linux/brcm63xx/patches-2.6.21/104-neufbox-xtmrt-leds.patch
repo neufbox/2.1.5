@@ -1,0 +1,27 @@
+--- linux-2.6.21.7/drivers/net/bcmxtmrt.c	2008-10-10 02:43:07.000000000 +0200
++++ linux-2.6.21.7/drivers/net/bcmxtmrt.c	2008-10-13 17:22:41.000000000 +0200
+@@ -65,6 +65,8 @@
+ #include <asm/uaccess.h>
+ #include <linux/blog.h>     /* CONFIG_BLOG */
+ 
++#include <neufbox/leds.h>
++
+ 
+ /* Externs. */
+ extern unsigned long getMemorySize(void);
+@@ -872,6 +874,7 @@ static int bcmxtmrt_xmit( struct sk_buff
+             pDevCtx->DevStats.tx_packets++;
+             pDevCtx->DevStats.tx_bytes += skb->len;
+             pDevCtx->pDev->trans_start = jiffies;
++            leds_control(led_id_traffic, led_state_blinkonce);
+ 
+         }
+         else
+@@ -1273,6 +1276,7 @@ static UINT32 bcmxtmrt_rxtask( UINT32 ul
+                 pDevCtx->pDev->last_rx = jiffies;
+                 pDevCtx->DevStats.rx_packets++;
+                 pDevCtx->DevStats.rx_bytes += skb->len;
++                leds_control(led_id_traffic, led_state_blinkonce);
+ 
+                 ulRxPktProcessed++;
+                 ulRxPktGood++;

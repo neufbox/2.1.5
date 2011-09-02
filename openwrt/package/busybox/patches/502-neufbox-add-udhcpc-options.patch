@@ -1,0 +1,34 @@
+diff -pruN a/networking/udhcp/options.c b/networking/udhcp/options.c
+--- a/networking/udhcp/options.c	2008-12-01 14:03:54.000000000 +0100
++++ b/networking/udhcp/options.c	2008-12-01 14:06:30.000000000 +0100
+@@ -23,9 +23,10 @@ const struct dhcp_option dhcp_options[] 
+ 	{ OPTION_IP | OPTION_LIST                 , 0x09 }, /* DHCP_LPR_SERVER    */
+ 	{ OPTION_STRING               | OPTION_REQ, 0x0c }, /* DHCP_HOST_NAME     */
+ 	{ OPTION_U16                              , 0x0d }, /* DHCP_BOOT_SIZE     */
++	{ OPTION_STRING               | OPTION_REQ, 0x0e }, /* DHCP_DUMP_FILE     */
+ 	{ OPTION_STRING | OPTION_LIST | OPTION_REQ, 0x0f }, /* DHCP_DOMAIN_NAME   */
+ 	{ OPTION_IP                               , 0x10 }, /* DHCP_SWAP_SERVER   */
+-	{ OPTION_STRING                           , 0x11 }, /* DHCP_ROOT_PATH     */
++	{ OPTION_STRING               | OPTION_REQ, 0x11 }, /* DHCP_ROOT_PATH     */
+ 	{ OPTION_U8                               , 0x17 }, /* DHCP_IP_TTL        */
+ 	{ OPTION_U16                              , 0x1a }, /* DHCP_MTU           */
+ 	{ OPTION_IP                   | OPTION_REQ, 0x1c }, /* DHCP_BROADCAST     */
+@@ -72,6 +73,7 @@ const char dhcp_option_strings[] ALIGN1 
+ 	"lprsrv" "\0"      /* DHCP_LPR_SERVER     */
+ 	"hostname" "\0"    /* DHCP_HOST_NAME      */
+ 	"bootsize" "\0"    /* DHCP_BOOT_SIZE      */
++	"dumpfile" "\0"    /* DHCP_DUMP_FILE      */
+ 	"domain" "\0"      /* DHCP_DOMAIN_NAME    */
+ 	"swapsrv" "\0"     /* DHCP_SWAP_SERVER    */
+ 	"rootpath" "\0"    /* DHCP_ROOT_PATH      */
+diff -pruN a/networking/udhcp/options.h b/networking/udhcp/options.h
+--- a/networking/udhcp/options.h	2008-12-01 14:07:04.000000000 +0100
++++ b/networking/udhcp/options.h	2008-12-01 14:07:43.000000000 +0100
+@@ -48,6 +48,7 @@ enum {
+ #define DHCP_LPR_SERVER		0x09
+ #define DHCP_HOST_NAME		0x0c
+ #define DHCP_BOOT_SIZE		0x0d
++#define DHCP_DUMP_FILE		0x0e
+ #define DHCP_DOMAIN_NAME	0x0f
+ #define DHCP_SWAP_SERVER	0x10
+ #define DHCP_ROOT_PATH		0x11

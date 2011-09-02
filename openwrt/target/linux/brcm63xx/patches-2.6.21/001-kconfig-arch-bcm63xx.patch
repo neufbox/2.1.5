@@ -1,0 +1,89 @@
+diff -pNur linux-2.6.21.7/arch/mips/Kconfig linux-2.6.21.7/arch/mips/Kconfig
+--- linux-2.6.21.7/arch/mips/Kconfig	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/Kconfig	2008-06-25 18:34:00.000000000 +0200
+@@ -16,6 +16,18 @@ choice
+ 	prompt "System type"
+ 	default SGI_IP22
+ 
++config MIPS_BRCM
++	bool "Broadcom 963xx boards"
++	select DMA_NONCOHERENT
++	select IRQ_CPU
++	select SYS_SUPPORTS_32BIT_KERNEL
++	select SYS_HAS_CPU_MIPS32_R1
++	select SYS_SUPPORTS_BIG_ENDIAN
++	select SYS_HAS_EARLY_PRINTK
++	select HAVE_GPIO_LIB
++	help
++	 This is a family of boards based on the Broadcom MIPS32
++
+ config MIPS_MTX1
+ 	bool "4G Systems MTX-1 board"
+ 	select DMA_NONCOHERENT
+@@ -835,6 +847,7 @@ source "arch/mips/tx4938/Kconfig"
+ source "arch/mips/vr41xx/Kconfig"
+ source "arch/mips/philips/pnx8550/common/Kconfig"
+ 
++source "arch/mips/bcm63xx/Kconfig"
+ endmenu
+ 
+ config RWSEM_GENERIC_SPINLOCK
+@@ -1105,6 +1123,9 @@ config BOOT_ELF32
+ 
+ config MIPS_L1_CACHE_SHIFT
+ 	int
++# CONFIG_MIPS_BRCM Begin Broadcom changed code
++	default "4" if MIPS_BRCM
++# End Broadcom changed code
+ 	default "4" if MACH_DECSTATION || SNI_RM
+ 	default "7" if SGI_IP27
+ 	default "5"
+@@ -1145,7 +1166,7 @@ config CPU_MIPS32_R1
+ 	bool "MIPS32 Release 1"
+ 	depends on SYS_HAS_CPU_MIPS32_R1
+ 	select CPU_HAS_LLSC
+-	select CPU_HAS_PREFETCH
++#	select CPU_HAS_PREFETCH
+ 	select CPU_SUPPORTS_32BIT_KERNEL
+ 	select CPU_SUPPORTS_HIGHMEM
+ 	help
+@@ -1885,6 +1908,9 @@ choice
+ 	config HZ_128
+ 		bool "128 HZ" if SYS_SUPPORTS_128HZ || SYS_SUPPORTS_ARBIT_HZ
+ 
++	config HZ_200
++		bool "200 HZ" if SYS_SUPPORTS_200HZ || SYS_SUPPORTS_ARBIT_HZ
++
+ 	config HZ_250
+ 		bool "250 HZ" if SYS_SUPPORTS_250HZ || SYS_SUPPORTS_ARBIT_HZ
+ 
+@@ -1932,6 +1958,7 @@ config HZ
+ 	default 48 if HZ_48
+ 	default 100 if HZ_100
+ 	default 128 if HZ_128
++	default 200 if HZ_200
+ 	default 250 if HZ_250
+ 	default 256 if HZ_256
+ 	default 1000 if HZ_1000
+@@ -2149,6 +2176,21 @@ config BINFMT_ELF32
+ 	bool
+ 	default y if MIPS32_O32 || MIPS32_N32
+ 
++# Begin Broadcom changed code.
++config BRCM_VMTOOLS
++	bool "Broadcom MIPS memory diagnostic tools"
++	help
++	 provides proc/accumem, proc/brcm/pagewalk and proc/brcm/free_pagewalk
++
++config BRCM_CSTAT
++	bool "Broadcom MIPS cache stats tool"
++	help
++	 provides proc/brcm/cstat, get cache hits/misses using performance counter
++
++config BRCM_IKOS
++	bool "Build image for IKOS simulation"
++# End Broadcom changed code.
++
+ endmenu
+ 
+ menu "Power management options"

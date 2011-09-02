@@ -1,0 +1,202 @@
+diff --exclude=.svn -Naur busybox-1.11.3/networking/wget.c busybox-1.11.3/networking/wget.c
+--- busybox-1.11.3/networking/wget.c	2009-01-21 15:33:38.670187097 +0100
++++ busybox-1.11.3/networking/wget.c	2009-01-21 15:44:37.810283513 +0100
+@@ -65,14 +65,14 @@ enum {
+ 	STALLTIME = 5                   /* Seconds when xfer considered "stalled" */
+ };
+ 
+-static unsigned int getttywidth(void)
++static unsigned int get_tty2_width(void)
+ {
+ 	unsigned width;
+-	get_terminal_width_height(0, &width, NULL);
++	get_terminal_width_height(2, &width, NULL);
+ 	return width;
+ }
+ 
+-static void progressmeter(int flag)
++static void progress_meter(int flag)
+ {
+ 	/* We can be called from signal handler */
+ 	int save_errno = errno;
+@@ -81,7 +81,7 @@ static void progressmeter(int flag)
+ 	unsigned ratio;
+ 	int barlength, i;
+ 
+-	if (flag == -1) { /* first call to progressmeter */
++	if (flag == -1) { /* first call to progress_meter */
+ 		start_sec = monotonic_sec();
+ 		lastupdate_sec = start_sec;
+ 		lastsize = 0;
+@@ -97,7 +97,7 @@ static void progressmeter(int flag)
+ 
+ 	fprintf(stderr, "\r%-20.20s%4d%% ", curfile, ratio);
+ 
+-	barlength = getttywidth() - 49;
++	barlength = get_tty2_width() - 49;
+ 	if (barlength > 0) {
+ 		/* god bless gcc for variable arrays :) */
+ 		i = barlength * ratio / 100;
+@@ -149,13 +149,13 @@ static void progressmeter(int flag)
+ 	}
+ 
+ 	if (flag == 0) {
+-		/* last call to progressmeter */
++		/* last call to progress_meter */
+ 		alarm(0);
+ 		transferred = 0;
+ 		fputc('\n', stderr);
+ 	} else {
+-		if (flag == -1) { /* first call to progressmeter */
+-			signal_SA_RESTART_empty_mask(SIGALRM, progressmeter);
++		if (flag == -1) { /* first call to progress_meter */
++			signal_SA_RESTART_empty_mask(SIGALRM, progress_meter);
+ 		}
+ 		alarm(1);
+ 	}
+@@ -199,7 +199,7 @@ static void progressmeter(int flag)
+  */
+ #else /* FEATURE_WGET_STATUSBAR */
+ 
+-static ALWAYS_INLINE void progressmeter(int flag ATTRIBUTE_UNUSED) { }
++static ALWAYS_INLINE void progress_meter(int flag ATTRIBUTE_UNUSED) { }
+ 
+ #endif
+ 
+@@ -454,6 +454,43 @@ static char *gethdr(int fd, char *buf, s
+ 	return hdrval;
+ }
+ 
++#if ENABLE_FEATURE_WGET_LONG_OPTIONS
++static char *URL_escape(const char *str)
++{
++	/* URL encode, see RFC 2396 */
++	char *dst;
++	char *res = dst = xmalloc(strlen(str) * 3 + 1);
++	unsigned char c;
++
++	while (1) {
++		c = *str++;
++		if (c == '\0'
++		/* || strchr("!&'()*-.=_~", c) - more code */
++		 || c == '!'
++		 || c == '&'
++		 || c == '\''
++		 || c == '('
++		 || c == ')'
++		 || c == '*'
++		 || c == '-'
++		 || c == '.'
++		 || c == '='
++		 || c == '_'
++		 || c == '~'
++		 || (c >= '0' && c <= '9')
++		 || ((c|0x20) >= 'a' && (c|0x20) <= 'z')
++		) {
++			*dst++ = c;
++			if (c == '\0')
++				return res;
++		} else {
++			*dst++ = '%';
++			*dst++ = bb_hexdigits_upcase[c >> 4];
++			*dst++ = bb_hexdigits_upcase[c & 0xf];
++		}
++	}
++}
++#endif
+ 
+ int wget_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+ int wget_main(int argc ATTRIBUTE_UNUSED, char **argv)
+@@ -469,6 +506,7 @@ int wget_main(int argc ATTRIBUTE_UNUSED,
+ 	char *proxy = 0;
+ 	char *dir_prefix = NULL;
+ #if ENABLE_FEATURE_WGET_LONG_OPTIONS
++	char *post_data;
+ 	char *extra_headers = NULL;
+ 	llist_t *headers_llist = NULL;
+ #endif
+@@ -498,7 +536,8 @@ int wget_main(int argc ATTRIBUTE_UNUSED,
+ 		WGET_OPT_RETRIES    = (1 << 7),
+ 		WGET_OPT_NETWORK_READ_TIMEOUT = (1 << 8),
+ 		WGET_OPT_PASSIVE    = (1 << 9),
+-		WGET_OPT_HEADER     = (1 << 10),
++		WGET_OPT_HEADER     = (1 << 10) * ENABLE_FEATURE_WGET_LONG_OPTIONS,
++		WGET_OPT_POST_DATA  = (1 << 11) * ENABLE_FEATURE_WGET_LONG_OPTIONS,
+ 	};
+ #if ENABLE_FEATURE_WGET_LONG_OPTIONS
+ 	static const char wget_longopts[] ALIGN1 =
+@@ -516,6 +555,7 @@ int wget_main(int argc ATTRIBUTE_UNUSED,
+ 		/* Ignored (we always use PASV): */
+ 		"passive-ftp\0"      No_argument       "\xfd"
+ 		"header\0"           Required_argument "\xfe"
++		"post-data\0"        Required_argument "\xfd"
+ 		;
+ #endif
+ 
+@@ -532,6 +572,7 @@ int wget_main(int argc ATTRIBUTE_UNUSED,
+ 				NULL, /* -t RETRIES */
+ 				&str_timeout /* -T NETWORK_READ_TIMEOUT */
+ 				USE_FEATURE_WGET_LONG_OPTIONS(, &headers_llist)
++				USE_FEATURE_WGET_LONG_OPTIONS(, &post_data)
+ 				);
+ 	if (strcmp(proxy_flag, "off") == 0) {
+ 		/* Use the proxy if necessary */
+@@ -634,6 +675,9 @@ int wget_main(int argc ATTRIBUTE_UNUSED,
+ 					target.is_ftp ? "f" : "ht", target.host,
+ 					target.path);
+ 			} else {
++				if (opt & WGET_OPT_POST_DATA)
++					dprintf(sfp, "POST /%s HTTP/1.1\r\n", target.path);
++				else
+ 				dprintf(sfp, "GET /%s HTTP/1.1\r\n", target.path);
+ 			}
+ 
+@@ -656,8 +700,20 @@ int wget_main(int argc ATTRIBUTE_UNUSED,
+ #if ENABLE_FEATURE_WGET_LONG_OPTIONS
+ 			if (extra_headers)
+ 				dprintf(sfp, extra_headers);
++
++			if (opt & WGET_OPT_POST_DATA) {
++				char *estr = URL_escape(post_data);
++				dprintf(sfp, "Content-Type: application/x-www-form-urlencoded\r\n");
++				dprintf(sfp, "Content-Length: %u\r\n" "\r\n" "%s",
++						(int) strlen(estr), estr);
++				/*dprintf(sfp, "Connection: Keep-Alive\r\n\r\n");*/
++				/*dprintf(sfp, "%s\r\n", estr);*/
++				free(estr);
++			} else
+ #endif
+-			dprintf(sfp, "Connection: close\r\n\r\n");
++			{ /* If "Connection:" is needed, document why */
++				dprintf(sfp, /* "Connection: close\r\n" */ "\r\n");
++			}
+ 
+ 			/*
+ 			* Retrieve HTTP response line and check for "200" status code.
+@@ -847,7 +903,7 @@ However, in real world it was observed t
+ 	 * Retrieve file
+ 	 */
+ 
+-	/* Do it before progressmeter (want to have nice error message) */
++	/* Do it before progress_meter (want to have nice error message) */
+ 	if (output_fd < 0) {
+ 		int o_flags = O_WRONLY | O_CREAT | O_TRUNC | O_EXCL;
+ 		/* compat with wget: -O FILE can overwrite */
+@@ -857,7 +913,7 @@ However, in real world it was observed t
+ 	}
+ 
+ 	if (!(opt & WGET_OPT_QUIET))
+-		progressmeter(-1);
++		progress_meter(-1);
+ 
+ 	if (chunked)
+ 		goto get_clen;
+@@ -899,7 +955,7 @@ However, in real world it was observed t
+ 	}
+ 
+ 	if (!(opt & WGET_OPT_QUIET))
+-		progressmeter(0);
++		progress_meter(0);
+ 
+ 	if ((use_proxy == 0) && target.is_ftp) {
+ 		close(dfp);

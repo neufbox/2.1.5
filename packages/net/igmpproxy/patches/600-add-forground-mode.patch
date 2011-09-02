@@ -1,0 +1,14 @@
+diff -pruN igmpproxy/src/igmpproxy.c igmpproxy/src/igmpproxy.c
+--- igmpproxy/src/igmpproxy.c	2009-01-21 09:33:48.000000000 +0100
++++ igmpproxy/src/igmpproxy.c	2009-01-22 18:41:54.000000000 +0100
+@@ -114,6 +114,10 @@ int main( int ArgCn, const char *ArgVc[]
+                 debugMode = 1;
+                 break;
+ 
++            case 'f':
++                debugMode = 1;
++                break;
++
+             case 'c':
+                 // Get new filepath...
+                 if (i + 1 < ArgCn && ArgVc[i+1][0] != '-') {

@@ -1,0 +1,9 @@
+diff -pruN dmalloc-5.5.2.orig/contrib/dmalloc_summarize.pl dmalloc-5.5.2/contrib/dmalloc_summarize.pl
+--- dmalloc-5.5.2.orig/contrib/dmalloc_summarize.pl	2008-01-29 16:15:22.000000000 +0100
++++ dmalloc-5.5.2/contrib/dmalloc_summarize.pl	2008-01-29 16:09:10.000000000 +0100
+@@ -1,4 +1,4 @@
+-#!/usr/bin/perl5 -w
++#!/usr/bin/perl -w
+ #
+ # dmalloc_summarize -- summarizes dmalloc log files
+ #

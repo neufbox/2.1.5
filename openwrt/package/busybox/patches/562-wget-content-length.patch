@@ -1,0 +1,13 @@
+diff --exclude=.svn -Naur busybox-1.11.3/networking/wget.c busybox-1.11.3/networking/wget.c
+--- busybox-1.11.3/networking/wget.c	2009-01-21 15:33:38.670187097 +0100
++++ busybox-1.11.3/networking/wget.c	2009-01-21 15:44:37.810283513 +0100
+@@ -908,5 +908,9 @@ However, in real world it was observed t
+ 		ftpcmd(sfp, "QUIT", NULL, buf);
+ 	}
+ 
++	/* if gotclen: content_len must be equal to 0 */
++	if (got_clen && content_len)
++		return 3; /* special magic: do not delete files */
++
+ 	return EXIT_SUCCESS;
+ }

@@ -1,0 +1,68 @@
+diff -pNur linux/net/ipv4/ip_input.c linux/net/ipv4/ip_input.c
+--- linux/net/ipv4/ip_input.c	2009-06-19 10:54:10.000000000 +0200
++++ linux/net/ipv4/ip_input.c	2009-02-26 22:50:16.000000000 +0100
+@@ -337,6 +337,11 @@ drop:
+ 	return -1;
+ }
+ 
++/* This and several other changes in the file are for avoiding unaligned accesses. Merged from brcm 2.6.8 kernel changes.*/
++#if defined(CONFIG_MIPS_BRCM) 
++#define READ32_ALIGNED(a) ((((__u16 *) &(a))[0]<<16)|((__u16 *) &(a))[1])
++#endif
++
+ static inline int ip_rcv_finish(struct sk_buff *skb)
+ {
+ 	struct iphdr *iph = skb->nh.iph;
+@@ -345,8 +350,9 @@ static inline int ip_rcv_finish(struct s
+ 	 *	Initialise the virtual path cache for the packet. It describes
+ 	 *	how the packet travels inside Linux networking.
+ 	 */
++
+ 	if (skb->dst == NULL) {
+-		int err = ip_route_input(skb, iph->daddr, iph->saddr, iph->tos,
++		int err = ip_route_input(skb, READ32_ALIGNED(iph->daddr), READ32_ALIGNED(iph->saddr), iph->tos,
+ 					 skb->dev);
+ 		if (unlikely(err)) {
+ 			if (err == -EHOSTUNREACH)
+@@ -383,6 +389,10 @@ int ip_rcv(struct sk_buff *skb, struct n
+ {
+ 	struct iphdr *iph;
+ 	u32 len;
++#if defined(CONFIG_MIPS_BRCM)
++	__u8 iph_ihl, iph_version;
++#endif
++
+ 
+ 	/* When the interface is in promisc. mode, drop all the crap
+ 	 * that it receives, do not try to analyse it.
+@@ -413,15 +423,30 @@ int ip_rcv(struct sk_buff *skb, struct n
+ 	 *	4.	Doesn't have a bogus length
+ 	 */
+ 
++#if defined(CONFIG_MIPS_BRCM)
++	iph_ihl = *(__u8 *)iph & 0xf;
++	iph_version = *(__u8 *)iph >> 4;
++
++	if (iph_ihl < 5 || iph_version != 4)
++#else
+ 	if (iph->ihl < 5 || iph->version != 4)
++#endif
+ 		goto inhdr_error;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++	if (!pskb_may_pull(skb, iph_ihl*4))
++#else
+ 	if (!pskb_may_pull(skb, iph->ihl*4))
++#endif
+ 		goto inhdr_error;
+ 
+ 	iph = skb->nh.iph;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++	if (unlikely(ip_fast_csum((u8 *)iph, iph_ihl)))
++#else
+ 	if (unlikely(ip_fast_csum((u8 *)iph, iph->ihl)))
++#endif
+ 		goto inhdr_error;
+ 
+ 	len = ntohs(iph->tot_len);

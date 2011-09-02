@@ -1,0 +1,17 @@
+--- miniupnpd-1.3/config.h.openwrt	2008-05-02 02:07:44.000000000 +0200
++++ miniupnpd-1.3/config.h.openwrt	2009-05-04 10:00:47.669352080 +0200
+@@ -8,10 +8,11 @@
+ 
+ #define UPNP_VERSION	"20070228"
+ #define USE_NETFILTER 1
++#define ENABLE_EVENTS 1
+-#define OS_NAME	"OpenWRT"
++#define OS_NAME	"neufbox"
+ /* OS/version */
+-#define OS_VERSION	"OpenWRT/kamikaze"
+-#define OS_URL	"http://openwrt.org/"
++#define OS_VERSION	"neufbox4"
++#define OS_URL	"http://efixo.com"
+ 
+ #define LOG_MINIUPNPD	LOG_DAEMON
+ 

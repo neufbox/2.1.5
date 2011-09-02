@@ -1,0 +1,55 @@
+diff --exclude=.svn -Naur busybox-1.11.3/networking/wget.c busybox-1.11.3/networking/wget.c
+--- busybox-1.11.3/networking/wget.c	2009-01-21 15:33:38.670187097 +0100
++++ busybox-1.11.3/networking/wget.c	2009-01-21 15:44:37.810283513 +0100
+@@ -430,15 +430,17 @@
+ 		KEY_content_length = 1, KEY_transfer_encoding, KEY_chunked, KEY_location
+ 	};
+ 	enum {
+-		WGET_OPT_CONTINUE   = 0x1,
+-		WGET_OPT_SPIDER	    = 0x2,
+-		WGET_OPT_QUIET      = 0x4,
+-		WGET_OPT_OUTNAME    = 0x8,
+-		WGET_OPT_PREFIX     = 0x10,
+-		WGET_OPT_PROXY      = 0x20,
+-		WGET_OPT_USER_AGENT = 0x40,
+-		WGET_OPT_PASSIVE    = 0x80,
+-		WGET_OPT_HEADER     = 0x100,
++		WGET_OPT_CONTINUE   = (1 << 0),
++		WGET_OPT_SPIDER	    = (1 << 1),
++		WGET_OPT_QUIET      = (1 << 2),
++		WGET_OPT_OUTNAME    = (1 << 3),
++		WGET_OPT_PREFIX     = (1 << 4),
++		WGET_OPT_PROXY      = (1 << 5),
++		WGET_OPT_USER_AGENT = (1 << 6),
++		WGET_OPT_RETRIES    = (1 << 7),
++		WGET_OPT_NETWORK_READ_TIMEOUT = (1 << 8),
++		WGET_OPT_PASSIVE    = (1 << 9),
++		WGET_OPT_HEADER     = (1 << 10),
+ 	};
+ #if ENABLE_FEATURE_WGET_LONG_OPTIONS
+ 	static const char wget_longopts[] ALIGN1 =
+@@ -450,6 +452,10 @@
+ 		"directory-prefix\0" Required_argument "P"
+ 		"proxy\0"            Required_argument "Y"
+ 		"user-agent\0"       Required_argument "U"
++		/* Ignored: */
++		// "tries\0"            Required_argument "t"
++		// "timeout\0"          Required_argument "T"
++		/* Ignored (we always use PASV): */
+ 		"passive-ftp\0"      No_argument       "\xfd"
+ 		"header\0"           Required_argument "\xfe"
+ 		;
+@@ -462,9 +468,11 @@
+ #endif
+ 	/* server.allocated = target.allocated = NULL; */
+ 	opt_complementary = "-1" USE_FEATURE_WGET_LONG_OPTIONS(":\xfe::");
+-	opt = getopt32(argv, "csqO:P:Y:U:",
++	opt = getopt32(argv, "csqO:P:Y:U:" /*ignored:*/ "t:T:",
+ 				&fname_out, &dir_prefix,
+-				&proxy_flag, &user_agent
++				&proxy_flag, &user_agent,
++				NULL, /* -t RETRIES */
++				NULL /* -T NETWORK_READ_TIMEOUT */
+ 				USE_FEATURE_WGET_LONG_OPTIONS(, &headers_llist)
+ 				);
+ 	if (strcmp(proxy_flag, "off") == 0) {

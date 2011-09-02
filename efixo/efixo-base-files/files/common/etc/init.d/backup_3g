@@ -1,0 +1,54 @@
+#!/bin/sh /etc/rc.common
+
+start () {
+	# DATA
+		if [ -e /var/run/ppp-wrapper.pid ] ; then
+			kill -HUP `cat /var/run/ppp-wrapper.pid`
+		fi
+	# VOIX
+		# force service tel
+		autoconf stop
+		nvram set gprs_service_tel on
+		cp /etc/autoconf/default/cfgnbxgprs.xml /tmp/autoconf
+
+		# save old values
+		status set gprs_autoconf_proto `autoconf get voip_proto`
+		status set gprs_autoconf_url `autoconf get voip_url`
+		status set gprs_autoconf_file `autoconf get voip_file`
+		status set gprs_autoconf_sig `autoconf get voip_sig`
+		status set gprs_autoconf_timestamp `autoconf get voip_timestamp`
+
+		# setup sip gprs
+		autoconf set voip_proto file
+		autoconf set voip_url /etc/autoconf/default/
+		autoconf set voip_file cfgnbxgprs.xml
+		autoconf set voip_sig sip
+		autoconf set voip_timestamp 100000000000
+
+		# restart voip
+		voip restart
+}
+
+stop () {
+	# DATA
+		if [ -e /var/run/ppp-wrapper.pid ] ; then
+			kill -HUP `cat /var/run/ppp-wrapper.pid`
+		fi
+	# VOIX
+		nvram set gprs_service_tel off
+		status set gprs_lock off
+
+		# restore old values
+		autoconf set voip_proto `status get gprs_autoconf_proto`
+		autoconf set voip_url `status get gprs_autoconf_url`
+		autoconf set voip_file `status get gprs_autoconf_file`
+		autoconf set voip_sig `status get gprs_autoconf_sig`
+		autoconf set voip_timestamp `status get gprs_autoconf_timestamp`
+
+		# start autoconf
+		autoconf start
+
+		# restart voip
+		voip restart
+}
+

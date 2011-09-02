@@ -1,0 +1,5 @@
+Build nb4-firmware:
+
+ ~$ cd svn.efixo.net/trunk
+ ~$ make nb4-main
+

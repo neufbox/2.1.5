@@ -1,0 +1,19 @@
+diff --exclude=.svn -pNur busybox-1.11.3/init/init.c busybox-1.11.3/init/init.c
+--- busybox-1.11.3/init/init.c	2008-12-08 15:56:36.000000000 +0100
++++ busybox-1.11.3/init/init.c	2008-12-08 15:56:16.000000000 +0100
+@@ -560,12 +560,14 @@ static void kill_all_processes(void)
+ 	message(L_CONSOLE | L_LOG, "Sending SIG%s to all processes", "TERM");
+ 	kill(-1, SIGTERM);
+ 	sync();
+-	sleep(1);
++	sleep(10);
+ 
++#if 0
+ 	message(L_CONSOLE | L_LOG, "Sending SIG%s to all processes", "KILL");
+ 	kill(-1, SIGKILL);
+ 	sync();
+ 	sleep(1);
++#endif
+ }
+ 
+ static void halt_reboot_pwoff(int sig)

@@ -1,0 +1,7 @@
+::sysinit:/etc/init.d/rcS S boot
+::shutdown:/etc/init.d/rcS K stop
+::respawn:/etc/init.d/telnet start
+::respawn:/etc/init.d/dropbear start
+::once:/etc/init.d/networks boot
+::once:/etc/init.d/services boot
+ttyS0::askfirst:-/bin/login

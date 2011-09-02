@@ -1,0 +1,16 @@
+diff --exclude=.svn -pNur igmpproxy/src/igmpproxy.c igmpproxy/src/igmpproxy.c
+--- igmpproxy/src/igmpproxy.c	2009-02-24 10:56:22.196399783 +0100
++++ igmpproxy/src/igmpproxy.c	2009-02-24 10:58:24.979585581 +0100
+@@ -118,6 +118,12 @@ int main( int ArgCn, const char *ArgVc[]
+                 debugMode = 1;
+                 break;
+ 
++	    /* neufbox manage wrapper */
++	    case 'w':
++               debugMode = 1;
++		kill(getppid(), SIGHUP);
++		break;
++
+             case 'c':
+                 // Get new filepath...
+                 if (i + 1 < ArgCn && ArgVc[i+1][0] != '-') {

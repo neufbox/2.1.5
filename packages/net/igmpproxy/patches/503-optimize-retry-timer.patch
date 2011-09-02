@@ -1,0 +1,33 @@
+diff -pruN igmpproxy/src/config.c igmpproxy/src/config.c
+--- igmpproxy/src/config.c	2005-05-24 17:49:29.000000000 +0200
++++ igmpproxy/src/config.c	2009-07-06 18:46:52.000000000 +0200
+@@ -68,14 +68,14 @@ struct SubnetList *parseSubnetAddress(ch
+ void initCommonConfig() {
+     commonConfig.robustnessValue = DEFAULT_ROBUSTNESS;
+     commonConfig.queryInterval = INTERVAL_QUERY;
+-    commonConfig.queryResponseInterval = INTERVAL_QUERY_RESPONSE;
++    commonConfig.queryResponseInterval = INTERVAL_GENERAL_QUERY_RESPONSE;
+ 
+     // The defaults are calculated from other settings.
+     commonConfig.startupQueryInterval = (unsigned int)(INTERVAL_QUERY / 4);
+     commonConfig.startupQueryCount = DEFAULT_ROBUSTNESS;
+ 
+     // Default values for leave intervals...
+-    commonConfig.lastMemberQueryInterval = INTERVAL_QUERY_RESPONSE;
++    commonConfig.lastMemberQueryInterval = INTERVAL_SPECIFIC_QUERY_RESPONSE;
+     commonConfig.lastMemberQueryCount    = DEFAULT_ROBUSTNESS;
+ 
+     // If 1, a leave message is sent upstream on leave messages from downstream.
+diff -pruN igmpproxy/src/defs.h igmpproxy/src/defs.h
+--- igmpproxy/src/defs.h	2009-06-30 18:58:41.000000000 +0200
++++ igmpproxy/src/defs.h	2009-07-06 18:47:26.000000000 +0200
+@@ -147,7 +147,8 @@ void log( int Serverity, int Errno, cons
+ 
+ // Define timer constants (in seconds...)
+ #define INTERVAL_QUERY          125
+-#define INTERVAL_QUERY_RESPONSE  10
++#define INTERVAL_GENERAL_QUERY_RESPONSE  10
++#define INTERVAL_SPECIFIC_QUERY_RESPONSE  1
+ //#define INTERVAL_QUERY_RESPONSE  10
+ 
+ #define ROUTESTATE_NOTJOINED            0   // The group corresponding to route is not joined

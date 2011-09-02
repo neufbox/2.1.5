@@ -1,0 +1,51 @@
+choice
+	prompt "Board support"
+	depends on BCM_BOARD
+	default BOARD_BCM963XX
+
+config BOARD_BCM963XX
+       bool "Generic Broadcom 963xx boards"
+       help
+
+config BOARD_LIVEBOX
+	bool "Inventel Livebox(es) boards"
+	help
+	  Boards using RedBoot.
+
+config BOARD_NEUFBOX4
+	bool "neufbox4 boards"
+	select GENERIC_GPIO
+	select GPIO_74HC164D
+	help
+
+endchoice
+
+menu "neufbox4"
+choice
+	prompt "Select profile"
+	depends on BOARD_NEUFBOX4
+
+config NEUFBOX_MAIN
+ 	bool "Main image"
+	depends on BOARD_NEUFBOX4
+
+config NEUFBOX_RESCUE
+ 	bool "Rescue image"
+	depends on BOARD_NEUFBOX4
+
+endchoice
+
+config NEUFBOX_ROBO_SWITCH
+	bool "Add support for Neufbox Robo switch"
+	depends on BOARD_NEUFBOX4
+	default "y"
+	help
+	  This option add support for Broadcom Robo Switch 5395
+
+config NEUFBOX_ETHTOOL
+	bool "Add support for Neufbox ethtool"
+	depends on BOARD_NEUFBOX4
+	default "y"
+	help
+	  This option add support for Ethtool
+endmenu

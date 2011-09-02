@@ -1,0 +1,13 @@
+diff -pNur igmpproxy/src/defs.h igmpproxy/src/defs.h
+--- igmpproxy/src/defs.h	2008-12-01 16:58:45.000000000 +0100
++++ igmpproxy/src/defs.h	2008-12-01 17:01:59.000000000 +0100
+@@ -47,6 +47,9 @@
+ 
+ #include <net/if.h>
+ 
++#define __force
++#define __inline__ inline
++#define __attribute_const__
+ // The multicats API needs linux spesific headers !!!                  
+ #ifdef USE_LINUX_IN_H
+     #include <linux/in.h>

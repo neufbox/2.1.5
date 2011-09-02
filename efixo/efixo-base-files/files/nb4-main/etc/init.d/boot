@@ -1,0 +1,82 @@
+#!/bin/sh /etc/rc.common
+
+START=10
+
+system_config() {
+	hostname -F /etc/hostname
+
+	ifconfig lo 127.0.0.1
+}
+
+print_banner() {
+	[ -f /etc/banner ] && cat /etc/banner
+	echo "Kernel Version : `uname -r`"
+}
+
+mount_all() {
+	mount -a
+
+	[ -z "`grep "/tmp" /proc/mounts`" ] && mount tmpfs /tmp -t tmpfs -o size=10M,nosuid,nodev,mode=1777
+
+	mkdir -p /etc/config
+	if ! mount -t jffs2 /dev/mtdblock-config /etc/config || test -n "`dmesg | grep 'Magic bitmask'`"
+	then
+    		echo "WARNING! mount config failed"
+    		flash_eraseall -j /dev/mtd-config
+    		mount -t jffs2 /dev/mtdblock-config /etc/config
+	fi
+}
+
+load_modules() {
+	[ -d /etc/modules.d ] && {
+		cd /etc/modules.d
+		sed 's/^[^#]/insmod &/' $* | ash 2>&- || :
+	}
+}
+
+start() {
+	system_config
+
+	print_banner
+
+	mount_all
+
+	mkdir -p /var/run
+	mkdir -p /var/log
+	mkdir -p /var/lock
+	mkdir -p /var/state
+	mkdir -p /var/chilli
+	mkdir -p /var/voip
+	mkdir -p /var/mnt
+	mkdir -p /var/adsl
+	mkdir -p /var/webdav
+	mkdir -p /var/ppp
+	mkdir -p /var/ddnsd
+	mkdir -p /var/smbd
+	mkdir -p /var/mt-daapd
+	mkdir -p /var/wlan
+	mkdir -p /var/httpd/sessions
+	mkdir -p /var/ntp
+	mkdir -p /var/tmp
+	mkdir -p /var/autoconf
+	chmod a+rwx /tmp /var/tmp
+
+	cp /usr/sbin/flashcp /tmp/flashcp
+
+	ln -s /dev/ring0 /var/log/daemon.log
+	ln -s /dev/ring1 /var/log/kern.log
+	ln -s /dev/ring2 /var/log/voip_proto.log
+	ln -s /dev/ring3 /var/log/voip.log
+	ln -s /dev/ring4 /var/log/messages
+	ln -s /dev/ring5 /var/log/syslog
+	ln -s /dev/ring6 /var/log/fastcgi.log
+	ln -s /dev/ring7 /var/log/voip_events.log
+	ln -s /dev/ring8 /var/log/hotspot.log
+	ln -s /dev/ring9 /var/log/lighttpd.log
+	ln -s /dev/ring10 /var/log/status.log
+	ln -s /dev/ring11 /var/log/debug.log
+
+	ln -s /dev/log /var/log/log
+
+	load_modules /etc/modules.d/*
+}

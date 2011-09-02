@@ -1,0 +1,12 @@
+--- a/init/init.c
++++ b/init/init.c
+@@ -952,6 +952,9 @@
+ 	/* First run the sysinit command */
+ 	run_actions(SYSINIT);
+ 
++	/* run the respawn stuff */
++	run_actions(RESPAWN);
++
+ 	/* Next run anything that wants to block */
+ 	run_actions(WAIT);
+ 

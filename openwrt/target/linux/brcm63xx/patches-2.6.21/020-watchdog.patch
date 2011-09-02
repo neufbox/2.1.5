@@ -1,0 +1,31 @@
+diff -pruN build_dir/linux-brcm63xx/linux-2.6.21.7/drivers/char/watchdog/Makefile watchdog/Makefile
+--- linux-2.6.21.7/drivers/char/watchdog/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/drivers/char/watchdog/Makefile	2008-08-04 15:43:32.000000000 +0200
+@@ -74,6 +74,7 @@ obj-$(CONFIG_WATCHDOG_RTAS) += wdrtas.o
+ # MIPS Architecture
+ obj-$(CONFIG_INDYDOG) += indydog.o
+ obj-$(CONFIG_WDT_RM9K_GPI) += rm9k_wdt.o
++obj-$(CONFIG_BCM63XX_WDT) += bcm63xx_wdt.o
+ 
+ # S390 Architecture
+ 
+diff -pruN build_dir/linux-brcm63xx/linux-2.6.21.7/drivers/char/watchdog/Kconfig watchdog/Kconfig
+--- linux-2.6.21.7/drivers/char/watchdog/Kconfig	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/drivers/char/watchdog/Kconfig	2008-08-04 15:44:52.000000000 +0200
+@@ -586,6 +586,16 @@ config WDT_RM9K_GPI
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called rm9k_wdt.
+ 
++config BCM63XX_WDT
++	tristate "Broadcom BCM63xx hardware watchdog"
++	depends on MIPS_BRCM
++	help
++	  Watchdog driver for the built in watchdog hardware in Broadcom
++	  BCM63xx SoC.
++
++	  To compile thi driver as a loadable module, choose M here.
++	  The module will be called bcm63xx_wdt.
++
+ # S390 Architecture
+ 
+ config ZVM_WATCHDOG

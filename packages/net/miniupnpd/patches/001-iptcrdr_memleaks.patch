@@ -1,0 +1,113 @@
+--- a/netfilter/iptcrdr.c
++++ b/netfilter/iptcrdr.c
+@@ -225,7 +225,8 @@ get_redirect_rule(const char * ifname, u
+ #ifdef IPTABLES_143
+ 	iptc_free(h);
+ #else
+-	iptc_free(&h);
++	if (h)
++		iptc_free(&h);
+ #endif
+ 	return r;
+ }
+@@ -307,7 +308,8 @@ get_redirect_rule_by_index(int index,
+ #ifdef IPTABLES_143
+ 	iptc_free(h);
+ #else
+-	iptc_free(&h);
++	if (h)
++		iptc_free(&h);
+ #endif
+ 	return r;
+ }
+@@ -405,7 +407,8 @@ delete_redirect_and_filter_rules(unsigne
+ #ifdef IPTABLES_143
+ 	iptc_free(h);
+ #else
+-	iptc_free(&h);
++	if (h)
++		iptc_free(&h);
+ #endif
+ 	if(r == 0)
+ 	{
+@@ -415,11 +418,23 @@ delete_redirect_and_filter_rules(unsigne
+ 		if(h)
+ 		{
+ 			r = delete_rule_and_commit(index, h, miniupnpd_nat_chain, "delete_redirect_rule");
++#ifdef IPTABLES_143
++			iptc_free(h);
++#else
++			if (h)
++				iptc_free(&h);
++#endif
+ 		}
+ 		h = iptc_init("filter");
+ 		if(h && (r == 0))
+ 		{
+ 			r = delete_rule_and_commit(index, h, miniupnpd_forward_chain, "delete_filter_rule");
++#ifdef IPTABLES_143
++			iptc_free(h);
++#else
++			if (h)
++				iptc_free(&h);
++#endif
+ 		}
+ 	}
+ 	del_redirect_desc(eport, proto);
+@@ -509,6 +524,12 @@ iptc_init_verify_and_append(const char *
+ 	{
+ 		syslog(LOG_ERR, "%s : iptc_is_chain() error : %s\n",
+ 		       logcaller, iptc_strerror(errno));
++#ifdef IPTABLES_143
++		iptc_free(h);
++#else
++		if (h)
++			iptc_free(&h);
++#endif
+ 		return -1;
+ 	}
+ #ifdef IPTABLES_143
+@@ -519,6 +540,12 @@ iptc_init_verify_and_append(const char *
+ 	{
+ 		syslog(LOG_ERR, "%s : iptc_append_entry() error : %s\n",
+ 		       logcaller, iptc_strerror(errno));
++#ifdef IPTABLES_143
++		iptc_free(h);
++#else
++		if (h)
++			iptc_free(&h);
++#endif
+ 		return -1;
+ 	}
+ #ifdef IPTABLES_143
+@@ -529,8 +556,20 @@ iptc_init_verify_and_append(const char *
+ 	{
+ 		syslog(LOG_ERR, "%s : iptc_commit() error : %s\n",
+ 		       logcaller, iptc_strerror(errno));
++#ifdef IPTABLES_143
++		iptc_free(h);
++#else
++		if (h)
++			iptc_free(&h);
++#endif
+ 		return -1;
+ 	}
++#ifdef IPTABLES_143
++	iptc_free(h);
++#else
++	if (h)
++		iptc_free(&h);
++#endif
+ 	return 0;
+ }
+ 
+@@ -758,7 +797,8 @@ list_redirect_rule(const char * ifname)
+ #ifdef IPTABLES_143
+ 	iptc_free(h);
+ #else
+-	iptc_free(&h);
++	if (h)
++		iptc_free(&h);
+ #endif
+ 	return 0;
+ }

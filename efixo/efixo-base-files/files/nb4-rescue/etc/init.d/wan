@@ -1,0 +1,156 @@
+#!/bin/sh /etc/rc.common
+
+KERNELVER=`uname -r`
+
+
+
+setup_adsl() {
+	# insert modules
+	echo "ADSL : insert modules..."
+
+	if insmod /lib/modules/$KERNELVER/bcmxtmcfg.ko
+	then
+		echo " Module XTMCFG [OK]"
+	else
+		echo " Module XTMCFG [KO]"
+		return -1
+	fi
+
+	if insmod /lib/modules/$KERNELVER/adsldd.ko
+	then
+		echo " Module ADSL [OK]"
+	else
+		echo " Module ADSL [KO]"
+		return -1
+	fi
+
+	# configure ADSL PHY and start connection
+	echo "ADSL : starting..."
+
+	xdslctl start --mod dlt --trellis on --bitswap on --up
+	xtmctl start --rq0 256
+	xtmctl operate intf --state 1 enable
+
+
+	# Generate PVC
+	echo "ADSL : creating PVC..."
+	atm_pvc='8.35:1-2:66 0.65:2:66 0.48:2:66 0.49:2:66 0.50:2:66 0.51:2:66 0.52:2:66'
+	for pvc_params in $atm_pvc
+	do
+		# Create PVC
+		pvc_id=`echo 1.$pvc_params | awk -F ":" '{print $1}'`
+
+		xtmctl operate conn --add $pvc_id aal5 1 llcsnap_eth
+
+		# Generate queue
+		pvc_size=`echo $pvc_params | awk -F ":" '{print $3}'`
+		pvc_queues=`echo $pvc_params | awk -F ":" '{print $2}' | sed 's/-/ /g'`
+
+		for queue in $pvc_queues
+		do
+			xtmctl operate conn --addq $pvc_id $pvc_size $queue
+		done
+
+		# Create net devices
+		nas_ifname=`echo $pvc_id | awk -F "." '{print "nas_"$2"_"$3}'`
+		xtmctl operate conn --createnetdev $pvc_id $nas_ifname
+	done
+
+
+	# Set everyone in a bridge
+	echo "ADSL : set interfaces in bridge..."
+	brctl addbr wan0
+
+	# ppp offset is 3
+	MAC=`getmac 3`
+	ifconfig nas_8_35 hw ether $MAC up
+	brctl addif wan0 nas_8_35
+	MAC=`getmac 2`
+	ifconfig nas_0_65 hw ether $MAC up
+	brctl addif wan0 nas_0_65
+	ifconfig nas_0_48 hw ether $MAC up
+	brctl addif wan0 nas_0_48
+	ifconfig nas_0_49 hw ether $MAC up
+	brctl addif wan0 nas_0_49
+	ifconfig nas_0_50 hw ether $MAC up
+	brctl addif wan0 nas_0_50
+	ifconfig nas_0_51 hw ether $MAC up
+	brctl addif wan0 nas_0_51
+	ifconfig nas_0_52 hw ether $MAC up
+	brctl addif wan0 nas_0_52
+
+
+	ifconfig wan0 up
+
+}
+
+
+ppp ()
+{
+	# launch ppp
+	echo "pppd_wrapper starting ..."
+	pppd_wrapper
+}
+
+dhcp ()
+{
+	echo "udhcpc starting ..."
+
+#	PID=`cat /proc/neufbox/pid`
+#	udhcpc -b -V "neufbox_"$PID"_"$main_version"_"$adsl_version -C -i $wan_ifname -s /etc/dhcp/dhcpc.script -p "$PIDFILE"
+	udhcpc -V neufbox_IN_RESCUE -C -i wan0 -s /etc/dhcp/dhcpc.script &
+}
+
+setup_ftth ()
+{
+	echo "FTTH : set interfaces in bridge..."
+	brctl addbr wan0
+	ifconfig eth1.3 hw ether `getmac 1` up
+	ifconfig eth1.4 hw ether `getmac 1` up
+	brctl addif wan0 eth1.3
+	brctl addif wan0 eth1.4
+	ifconfig wan0 up
+
+	echo "udhcpc starting ..."
+	udhcpc -V neufbox_IN_RESCUE -C -i wan0 -s /etc/dhcp/dhcpc.script &
+}
+
+setup_mediafibre()
+{
+	echo "MEDIAFIBRE : Not implemented !"
+	return -1
+
+
+	ifconfig eth1 hw ether `getmac 1` up
+	vconfig add eth1 100
+	ifconfig eth1.100 `getmac 1` up
+	udhcpc -V neufbox_IN_RESCUE -C -i eth1.100 -s /etc/dhcp/dhcpc.script &
+}
+
+
+
+boot() {
+	
+	NET_INFRA=`getinfra`
+
+	case "$NET_INFRA" in
+
+		adsl)
+			setup_adsl
+			ppp
+			dhcp
+			/etc/init.d/upgrade &
+			;;
+
+		ftth)
+			setup_ftth
+			;;
+
+		mediafibre)
+			setup_mediafibre
+			;;
+
+
+	esac
+
+}

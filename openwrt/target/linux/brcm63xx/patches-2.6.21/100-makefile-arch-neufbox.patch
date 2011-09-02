@@ -1,0 +1,14 @@
+--- linux-2.6.21.5/arch/mips/Makefile	2008-05-21 09:33:22.000000000 +0200
++++ linux-2.6.21.5/arch/mips/Makefile	2008-05-21 09:36:36.000000000 +0200
+@@ -295,6 +295,11 @@ endif
+ # CONFIG_MIPS_BRCM End Broadcom added code.
+ 
+ #
++# Neufbox board
++#
++cflags-$(CONFIG_BOARD_NEUFBOX4)	+= -Iinclude/asm-mips/mach-bcm63xx/nb4/
++
++#
+ # Cobalt Server
+ #
+ core-$(CONFIG_MIPS_COBALT)	+= arch/mips/cobalt/

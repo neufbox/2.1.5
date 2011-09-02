@@ -1,0 +1,11 @@
+--- a/netfilter/iptcrdr.c
++++ b/netfilter/iptcrdr.c
+@@ -146,7 +146,7 @@ add_filter_rule2(const char * ifname, co
+                  unsigned short eport, unsigned short iport,
+                  int proto, const char * desc)
+ {
+-	return add_filter_rule(proto, iaddr, iport);
++	return 0; /* add_filter_rule(proto, iaddr, iport); */
+ }
+ 
+ /* get_redirect_rule() 

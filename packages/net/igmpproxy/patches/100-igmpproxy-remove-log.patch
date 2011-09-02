@@ -1,0 +1,34 @@
+--- a/src/igmp.c
++++ b/src/igmp.c
+@@ -136,12 +136,12 @@
+                 return;
+             } 
+             else if(src == checkVIF->InAdr.s_addr) {
+-                log(LOG_NOTICE, 0, "Route activation request from %s for %s is from myself. Ignoring.",
++                log(LOG_DEBUG, 0, "Route activation request from %s for %s is from myself. Ignoring.",
+                     inetFmt(src, s1), inetFmt(dst, s2));
+                 return;
+             }
+             else if(!isAdressValidForIf(checkVIF, src)) {
+-                log(LOG_WARNING, 0, "The source address %s for group %s, is not in any valid net for upstream VIF.",
++                log(LOG_DEBUG, 0, "The source address %s for group %s, is not in any valid net for upstream VIF.",
+                     inetFmt(src, s1), inetFmt(dst, s2));
+                 return;
+             }
+--- a/src/syslog.c
++++ b/src/syslog.c
+@@ -82,11 +82,10 @@
+   LogLastErrno = Errno;
+ 
+   // control logging to stderr
+-  if(Serverity < LOG_WARNING || Serverity <= Log2Stderr )
++  if(Serverity < LOG_WARNING || Serverity <= Log2Stderr ) {
+     fprintf( stderr, "%s\n", LogLastMsg );
+-
+-  // always to syslog
+-  syslog( Serverity, "%s", LogLastMsg );
++    syslog( Serverity, "%s", LogLastMsg );
++  }
+ 
+   if( Serverity <= LOG_ERR )
+     exit( -1 );

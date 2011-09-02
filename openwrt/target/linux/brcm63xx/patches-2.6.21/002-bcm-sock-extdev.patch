@@ -1,0 +1,48 @@
+diff -pNur linux-2.6.21.7/include/net/sock.h linux-2.6.21.7/include/net/sock.h
+--- linux-2.6.21.7/include/net/sock.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/net/sock.h	2008-06-25 18:34:14.000000000 +0200
+@@ -252,6 +252,9 @@ struct sock {
+ 	__u32			sk_sndmsg_off;
+ 	int			sk_write_pending;
+ 	void			*sk_security;
++#if defined(CONFIG_MIPS_BRCM)
++	char			extdev[64];
++#endif
+ 	void			(*sk_state_change)(struct sock *sk);
+ 	void			(*sk_data_ready)(struct sock *sk, int bytes);
+ 	void			(*sk_write_space)(struct sock *sk);
+diff --exclude=.svn -pNur linux-2.6.21.7/net/core/sock.c linux-2.6.21.7/net/core/sock.c
+--- linux-2.6.21.7/net/core/sock.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/core/sock.c	2008-10-13 18:23:39.000000000 +0200
+@@ -1633,6 +1633,15 @@ int sock_common_recvmsg(struct kiocb *io
+ 
+ EXPORT_SYMBOL(sock_common_recvmsg);
+ 
++#if defined(CONFIG_MIPS_BRCM)
++int sock_get_extif(struct sock *sk, char __user *extif)
++{
++    return copy_to_user(extif, sk->extdev, sizeof(sk->extdev)) ? -EFAULT: 0;
++}
++
++EXPORT_SYMBOL(sock_get_extif);
++#endif
++
+ /*
+  *	Set socket options on an inet socket.
+  */
+diff --exclude=.svn -pNur linux-2.6.21.7/net/ipv4/raw.c linux-2.6.21.7/net/ipv4/raw.c
+--- linux-2.6.21.7/net/ipv4/raw.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/ipv4/raw.c	2008-10-13 18:23:39.000000000 +0200
+@@ -598,6 +598,11 @@ static int raw_recvmsg(struct kiocb *ioc
+ 	if (!skb)
+ 		goto out;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++        if(skb->extif)
++		sprintf(sk->extdev, "%s ", skb->extif);
++#endif
++
+ 	copied = skb->len;
+ 	if (len < copied) {
+ 		msg->msg_flags |= MSG_TRUNC;
+

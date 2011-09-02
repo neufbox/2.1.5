@@ -1,0 +1,17 @@
+diff --exclude=.svn -pNur dropbear-0.51/dbutil.c dropbear-0.51/dbutil.c
+--- dropbear-0.51/dbutil.c	2009-01-22 11:50:33.542453621 +0100
++++ dropbear-0.51/dbutil.c	2009-01-22 11:58:05.156022812 +0100
+@@ -164,11 +164,11 @@ static void set_sock_priority(int sock) 
+ 	/* set the TOS bit. note that this will fail for ipv6, I can't find any
+ 	 * equivalent. */
+ #ifdef IPTOS_LOWDELAY
+-	val = IPTOS_LOWDELAY;
++	val = (0x2D<<2) /* IPTOS_LOWDELAY */;
+ 	setsockopt(sock, IPPROTO_IP, IP_TOS, (void*)&val, sizeof(val));
+ #endif
+ 
+-#ifdef SO_PRIORITY
++#ifdef SO_PRIORITY && !defined (NB4)
+ 	/* linux specific, sets QoS class.
+ 	 * 6 looks to be optimal for interactive traffic (see tc-prio(8) ). */
+ 	val = 6;

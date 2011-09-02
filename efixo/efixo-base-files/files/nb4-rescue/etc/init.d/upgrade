@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# now wait for 2 minutes before we launch uprgade
+echo " ** Wait 2 minutes for a dhcp answer"
+sleep 120
+
+# look if upgrade has already been launched by dhcp script.
+# if we're in this case, we leave it to dhcp
+if [ -f /var/dhcp/ip-addr ]
+then
+	exit 0
+fi
+
+# from this point, we assume it is option 3
+echo " ** Assuming option 3, upgrade launched..."
+while [ true ]
+do
+	upgrade && break
+	echo "    **** Upgrade failed... Launching again in 10 sec****"
+	sleep 10
+done
+
+
+exit 0
+ 

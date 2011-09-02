@@ -1,0 +1,23 @@
+diff -x .svn -pNur linux-2.6.21.5/drivers/mtd/maps/Kconfig linux-2.6.21.5/drivers/mtd/maps/Kconfig
+--- linux-2.6.21.5/drivers/mtd/maps/Kconfig	2008-05-21 09:33:00.000000000 +0200
++++ linux-2.6.21.5/drivers/mtd/maps/Kconfig	2008-05-21 09:36:36.000000000 +0200
+@@ -77,6 +77,12 @@ config MTD_BCM963XX
+          Broadcom 963xx ADSL board flash memory
+ # CONFIG_MIPS_BRCM End Broadcom changed code
+ 
++config MTD_NEUFBOX4
++       tristate "CFI Neuf Box flash memory support"
++       depends on BOARD_NEUFBOX4 &&  MTD_CFI && MTD_PARTITIONS && MTD_CFI_AMDSTD
++       help
++         Neuf Box board flash memory
++
+ config MTD_SUN_UFLASH
+        tristate "Sun Microsystems userflash support"
+        depends on SPARC && MTD_CFI
+diff -x .svn -pNur linux-2.6.21.5/drivers/mtd/maps/Makefile linux-2.6.21.5/drivers/mtd/maps/Makefile
+--- linux-2.6.21.5/drivers/mtd/maps/Makefile	2008-05-21 09:33:00.000000000 +0200
++++ linux-2.6.21.5/drivers/mtd/maps/Makefile	2008-05-21 09:36:36.000000000 +0200
+@@ -74,2 +74,3 @@ obj-$(CONFIG_MTD_MTX1)		+= mtx-1_flash.o
+ obj-$(CONFIG_MTD_TQM834x)	+= tqm834x.o
+ obj-$(CONFIG_MTD_BCM963XX)      += bcm963xx.o
++obj-$(CONFIG_MTD_NEUFBOX4)       += neufbox4-flash.o

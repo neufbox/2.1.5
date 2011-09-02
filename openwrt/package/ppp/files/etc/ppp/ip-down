@@ -1,0 +1,48 @@
+#!/bin/sh
+
+logger -s -t PPP_STATUS -p local1.info "PPP DOWN :( OLDIPLOCAL $OLDIPLOCAL IPLOCAL $IPLOCAL"
+
+logger -s -t PPP_STATUS -p local1.info "DOWN rc.qos o3_stop"
+
+/etc/init.d/rc.qos o3_stop
+logger -s -t PPP_STATUS -p local1.info "DOWN rc.qos deinit"
+/etc/init.d/rc.qos deinit
+logger -s -t PPP_STATUS -p local1.info "DOWN call route ppp-down"
+/etc/init.d/route ppp-down $IPLOCAL $IPREMOTE $IFNAME
+
+# Remove port 80 DNAT to webui when PPP is down for now
+#POS=`status list_count stb_list`
+#let POS="POS+1"
+#iptables -t nat -I PREROUTING $POS -i `nvram get lan_ifname` -p tcp --dport 80 -j DNAT --to `nvram get lan_ipaddr`:80
+
+# cleanup filter
+iptables -D INPUT -i $IFNAME -p icmp -j ICMP_FILTER
+iptables -D FORWARD -i $IFNAME -m state --state NEW -j WIN_FILTER
+iptables -D FORWARD -o $IFNAME -m state --state NEW -j WIN_FILTER
+iptables -D FORWARD -o $IFNAME -p tcp -m tcp --dport 25 -j SMTP_FILTER
+
+
+# delete source nat for hotspot
+HOTSPOT_NET=`nvram get hotspot_net`
+iptables -t nat -D POSTROUTING -s $HOTSPOT_NET -o $IFNAME -j SNAT --to $IPLOCAL
+logger -s -t PPP_STATUS -p local1.info "PPP DOWN::iptables -t nat -D POSTROUTING -s $HOTSPOT_NET -o $IFNAME -j SNAT --to $IPLOCAL"
+
+
+status set net_data_ifname ""
+status set net_data_ipaddr ""
+status set net_data_gateway ""
+status set net_data_dns ""
+status set net_data_status "down"
+event notify 'data-down'
+
+status set ppp_session ""
+status set ppp_server ""
+# NOTE: this give a chance for VOIP in option 3
+status set ppp_ifname ""
+status set ppp_ipaddr ""
+status set ppp_gateway ""
+status set ppp_dns ""
+status set ppp_status "down"
+event notify 'ppp-down'
+
+exit 0

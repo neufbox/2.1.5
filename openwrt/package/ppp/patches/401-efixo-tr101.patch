@@ -1,0 +1,323 @@
+diff -pruN ppp-2.4.4/pppd/plugins/rp-pppoe/discovery.c ppp-2.4.4.ref/pppd/plugins/rp-pppoe/discovery.c
+--- ppp-2.4.4/pppd/plugins/rp-pppoe/discovery.c	2008-12-04 17:08:44.000000000 +0100
++++ ppp-2.4.4.ref/pppd/plugins/rp-pppoe/discovery.c	2008-12-04 17:07:05.000000000 +0100
+@@ -282,6 +282,89 @@ sendPADI(PPPoEConnection *conn)
+ 	plen += sizeof(pid) + TAG_HDR_SIZE;
+     }
+ 
++#ifdef NB4_MAIN
++    /* Rajout de la partie Neuf Cegetel pour les options de debit dans le paquet PADR */
++    if ( conn->tr101 ) {
++        unsigned char slong;
++
++	info("%s : %d %d", __func__, conn->upstreamDatarate, conn->downstreamDatarate);
++	if ( conn->circuitid )
++		info("circuitid %s", conn->circuitid);
++	if ( conn->remoteid )
++		info("remoteid %s", conn->remoteid);
++
++	/* ajout du agent-circuit-id */
++	if ((slong = strlen(conn->circuitid)) > 0 ){
++	    PPPoEVendorTag monTag;
++	    monTag.length = htons(4 + 2 + slong);
++	    monTag.type = htons(TAG_VENDOR_SPECIFIC);
++	    monTag.vendor = htonl(0x00000DE9); /* TODO: trouver le Vendor-Id de 9 */
++	    monTag.subtag = SUBTAG_AGENT_CIRCUIT_ID;
++	    monTag.subtaglength = slong;
++	    memcpy(monTag.payload, conn->circuitid,slong);
++	    
++	    CHECK_ROOM(cursor, packet.payload,
++		       ntohs(monTag.length) + TAG_HDR_SIZE);
++	    memcpy(cursor, &monTag, ntohs(monTag.length) + TAG_HDR_SIZE);
++	    cursor += ntohs(monTag.length) + TAG_HDR_SIZE;
++	    plen += ntohs(monTag.length) + TAG_HDR_SIZE;
++	}
++
++	/* ajout du agent-remote-id */
++	if ((slong = strlen(conn->remoteid)) > 0 ){
++	    PPPoEVendorTag monTag;
++	    monTag.length = htons(4 + 2 + slong);
++	    monTag.type = htons(TAG_VENDOR_SPECIFIC);
++	    monTag.vendor = htonl(0x00000DE9); /* TODO: trouver le Vendor-Id de 9 */
++	    monTag.subtag = SUBTAG_AGENT_REMOTE_ID;
++	    monTag.subtaglength = slong;
++	    memcpy(monTag.payload, conn->remoteid, slong);
++	    
++	    CHECK_ROOM(cursor, packet.payload,
++		       ntohs(monTag.length) + TAG_HDR_SIZE);
++	    memcpy(cursor, &monTag, ntohs(monTag.length) + TAG_HDR_SIZE);
++	    cursor += ntohs(monTag.length) + TAG_HDR_SIZE;
++	    plen += ntohs(monTag.length) + TAG_HDR_SIZE;
++	}
++
++	/* adsl upstream */
++   	if (conn->upstreamDatarate > 0) {
++	    PPPoEVendorTag monTag;
++	    monTag.length = htons(4 + 2 + 4);
++	    monTag.type = htons(TAG_VENDOR_SPECIFIC);
++	    monTag.vendor = htonl(0x00000DE9); /* TODO: trouver le Vendor-Id de 9 */
++	    monTag.subtag = SUBTAG_OPTION_UP;
++	    monTag.subtaglength = 4;
++	    unsigned int temp = htonl(conn->upstreamDatarate);
++	    memcpy(monTag.payload, &temp, sizeof(temp));
++	    
++	    CHECK_ROOM(cursor, packet.payload,
++		       ntohs(monTag.length) + TAG_HDR_SIZE);
++	    memcpy(cursor, &monTag, ntohs(monTag.length) + TAG_HDR_SIZE);
++	    cursor += ntohs(monTag.length) + TAG_HDR_SIZE;
++	    plen += ntohs(monTag.length) + TAG_HDR_SIZE;
++	}
++
++	/* adsl downstream */
++	if (conn->downstreamDatarate > 0) {
++	    PPPoEVendorTag monTag;
++	    monTag.length = htons(4 + 2 + 4);
++	    monTag.type = htons(TAG_VENDOR_SPECIFIC);
++	    monTag.vendor = htonl(0x00000DE9); /* TODO: trouver le Vendor-Id de 9 */
++	    monTag.subtag = SUBTAG_OPTION_DOWN;
++	    monTag.subtaglength = 4;
++	    unsigned int temp = htonl(conn->downstreamDatarate);
++	    memcpy(monTag.payload, &temp, sizeof(temp));
++	    
++	    CHECK_ROOM(cursor, packet.payload,
++		       ntohs(monTag.length) + TAG_HDR_SIZE);
++	    memcpy(cursor, &monTag, ntohs(monTag.length) + TAG_HDR_SIZE);
++	    cursor += ntohs(monTag.length) + TAG_HDR_SIZE;
++	    plen += ntohs(monTag.length) + TAG_HDR_SIZE;
++	}
++    }
++#endif /* NB4_MAIN */
++
+     packet.length = htons(plen);
+ 
+     sendPacket(conn, conn->discoverySocket, &packet, (int) (plen + HDR_SIZE));
+@@ -465,6 +548,82 @@ sendPADR(PPPoEConnection *conn)
+ 	cursor += ntohs(conn->relayId.length) + TAG_HDR_SIZE;
+ 	plen += ntohs(conn->relayId.length) + TAG_HDR_SIZE;
+     }
++#ifdef NB4_MAIN
++    /* Rajout de la partie Neuf Cegetel pour les options de debit dans le paquet PADR */
++    if ( conn->tr101 ) {
++	unsigned char slong;
++
++	/* ajout du agent-circuit-id */
++	if ((slong = strlen(conn->circuitid)) > 0 ){
++	    PPPoEVendorTag monTag;
++	    monTag.length = htons(4 + 2 + slong);
++	    monTag.type = htons(TAG_VENDOR_SPECIFIC);
++	    monTag.vendor = htonl(0x00000DE9); /* TODO: trouver le Vendor-Id de 9 */
++	    monTag.subtag = SUBTAG_AGENT_CIRCUIT_ID;
++	    monTag.subtaglength = slong;
++	    memcpy(monTag.payload, conn->circuitid, slong);
++	    
++	    CHECK_ROOM(cursor, packet.payload,
++		       ntohs(monTag.length) + TAG_HDR_SIZE);
++	    memcpy(cursor, &monTag, ntohs(monTag.length) + TAG_HDR_SIZE);
++	    cursor += ntohs(monTag.length) + TAG_HDR_SIZE;
++	    plen += ntohs(monTag.length) + TAG_HDR_SIZE;
++	}
++
++	/* ajout du agent-remote-id */
++	if ((slong = strlen(conn->remoteid)) > 0 ){
++	    PPPoEVendorTag monTag;
++	    monTag.length = htons(4 + 2 + slong);
++	    monTag.type = htons(TAG_VENDOR_SPECIFIC);
++	    monTag.vendor = htonl(0x00000DE9); /* TODO: trouver le Vendor-Id de 9 */
++	    monTag.subtag = SUBTAG_AGENT_REMOTE_ID;
++	    monTag.subtaglength = slong;
++	    memcpy(monTag.payload, conn->remoteid, slong);
++	    
++	    CHECK_ROOM(cursor, packet.payload,
++		       ntohs(monTag.length) + TAG_HDR_SIZE);
++	    memcpy(cursor, &monTag, ntohs(monTag.length) + TAG_HDR_SIZE);
++	    cursor += ntohs(monTag.length) + TAG_HDR_SIZE;
++	    plen += ntohs(monTag.length) + TAG_HDR_SIZE;
++	}
++
++	/* adsl upstream */
++   	if (conn->upstreamDatarate > 0) {
++	    PPPoEVendorTag monTag;
++	    monTag.length = htons(4 + 2 + 4);
++	    monTag.type = htons(TAG_VENDOR_SPECIFIC);
++	    monTag.vendor = htonl(0x00000DE9); /* TODO: trouver le Vendor-Id de 9 */
++	    monTag.subtag = SUBTAG_OPTION_UP;
++	    monTag.subtaglength = 4;
++	    unsigned int temp = htonl(conn->upstreamDatarate);
++	    memcpy(monTag.payload, &temp, sizeof(temp));
++	    
++	    CHECK_ROOM(cursor, packet.payload,
++		       ntohs(monTag.length) + TAG_HDR_SIZE);
++	    memcpy(cursor, &monTag, ntohs(monTag.length) + TAG_HDR_SIZE);
++	    cursor += ntohs(monTag.length) + TAG_HDR_SIZE;
++	    plen += ntohs(monTag.length) + TAG_HDR_SIZE;
++	}
++
++	/* adsl downstream */
++	if (conn->downstreamDatarate > 0) {
++	    PPPoEVendorTag monTag;
++	    monTag.length = htons(4 + 2 + 4);
++	    monTag.type = htons(TAG_VENDOR_SPECIFIC);
++	    monTag.vendor = htonl(0x00000DE9); /* TODO: trouver le Vendor-Id de 9 */
++	    monTag.subtag = SUBTAG_OPTION_DOWN;
++	    monTag.subtaglength = 4;
++	    unsigned int temp = htonl(conn->downstreamDatarate);
++	    memcpy(monTag.payload, &temp, sizeof(temp));
++	    
++	    CHECK_ROOM(cursor, packet.payload,
++		       ntohs(monTag.length) + TAG_HDR_SIZE);
++	    memcpy(cursor, &monTag, ntohs(monTag.length) + TAG_HDR_SIZE);
++	    cursor += ntohs(monTag.length) + TAG_HDR_SIZE;
++	    plen += ntohs(monTag.length) + TAG_HDR_SIZE;
++	}
++    }
++#endif /* NB4_MAIN */
+ 
+     packet.length = htons(plen);
+     sendPacket(conn, conn->discoverySocket, &packet, (int) (plen + HDR_SIZE));
+diff -pruN ppp-2.4.4/pppd/plugins/rp-pppoe/plugin.c ppp-2.4.4.ref/pppd/plugins/rp-pppoe/plugin.c
+--- ppp-2.4.4/pppd/plugins/rp-pppoe/plugin.c	2008-12-04 17:08:44.000000000 +0100
++++ ppp-2.4.4.ref/pppd/plugins/rp-pppoe/plugin.c	2008-12-04 17:07:05.000000000 +0100
+@@ -63,6 +63,14 @@ static char *acName = NULL;
+ static char *existingSession = NULL;
+ static int printACNames = 0;
+ 
++#ifdef NB4_MAIN
++static int tr101 = 0;
++static int dsl_upstream = 0;
++static int dsl_downstream = 0;
++static char *remoteid = NULL;
++static char *circuitid = NULL;
++#endif /* NB4_MAIN */
++
+ static int PPPoEDevnameHook(char *cmd, char **argv, int doit);
+ static option_t Options[] = {
+     { "device name", o_wild, (void *) &PPPoEDevnameHook,
+@@ -77,6 +85,17 @@ static option_t Options[] = {
+       "Attach to existing session (sessid:macaddr)" },
+     { "rp_pppoe_verbose", o_int, &printACNames,
+       "Be verbose about discovered access concentrators"},
++#ifdef NB4_MAIN
++    { "tr101", o_int, &tr101, "Enable TR101 recommandation"},
++    { "upstream", o_int, &dsl_upstream,
++      "ADSL upstream rate, needed for TR101 recommandation"},
++    { "downstream", o_int, &dsl_downstream,
++      "ADSL downstream rate, needed for TR101 recommandation"},
++    { "remoteid", o_string, &remoteid,
++      "TR101 remote ID"},
++    { "circuitid", o_string, &circuitid,
++      "TR101 circuit ID"},
++#endif /* NB4_MAIN */
+     { NULL }
+ };
+ 
+@@ -127,6 +146,19 @@ PPPOEConnectDevice(void)
+ {
+     struct sockaddr_pppox sp;
+ 
++#ifdef NB4_MAIN
++    /* copy tr101 options in conn */
++    conn->tr101 = tr101;
++    conn->upstreamDatarate = dsl_upstream;
++    conn->downstreamDatarate = dsl_downstream;
++    if ( remoteid ) {
++	    SET_STRING(conn->remoteid, remoteid);
++    }
++    if( circuitid ) { 
++	    SET_STRING(conn->circuitid, circuitid); 
++    }
++#endif /* NB4_MAIN */
++
+     strlcpy(ppp_devnam, devnam, sizeof(ppp_devnam));
+     if (existingSession) {
+ 	unsigned int mac[ETH_ALEN];
+Les fichiers binaires ppp-2.4.4/pppd/plugins/rp-pppoe/plugin.o et ppp-2.4.4.ref/pppd/plugins/rp-pppoe/plugin.o sont différents.
+Les fichiers binaires ppp-2.4.4/pppd/plugins/rp-pppoe/pppoe-discovery et ppp-2.4.4.ref/pppd/plugins/rp-pppoe/pppoe-discovery sont différents.
+diff -pruN ppp-2.4.4/pppd/plugins/rp-pppoe/pppoe-discovery.c ppp-2.4.4.ref/pppd/plugins/rp-pppoe/pppoe-discovery.c
+--- ppp-2.4.4/pppd/plugins/rp-pppoe/pppoe-discovery.c	2008-12-04 17:08:44.000000000 +0100
++++ ppp-2.4.4.ref/pppd/plugins/rp-pppoe/pppoe-discovery.c	2008-12-04 17:07:05.000000000 +0100
+@@ -30,7 +30,11 @@ int main(int argc, char *argv[])
+ 
+     memset(conn, 0, sizeof(PPPoEConnection));
+ 
++#ifdef NB4_MAIN    
++    while ((opt = getopt(argc, argv, "I:D:VUAS:C:hu:d:r:c:")) > 0) {
++#else
+     while ((opt = getopt(argc, argv, "I:D:VUAS:C:h")) > 0) {
++#endif /* NB4_MAIN */	    
+ 	switch(opt) {
+ 	case 'S':
+ 	    conn->serviceName = strDup(optarg);
+@@ -56,6 +60,20 @@ int main(int argc, char *argv[])
+ 	case 'A':
+ 	    /* this is the default */
+ 	    break;
++#ifdef NB4_MAIN	    
++	case 'u':
++		conn->upstreamDatarate = (unsigned long)strtol(optarg, NULL, 10);
++		break;
++	case 'd':
++		conn->downstreamDatarate = (unsigned long)strtol(optarg, NULL, 10);
++		break;
++	case 'r':
++		SET_STRING(conn->remoteid, optarg);
++		break;
++	case 'c':
++		SET_STRING(conn->circuitid, optarg);
++		break;
++#endif /* NB4_MAIN */
+ 	case 'V':
+ 	case 'h':
+ 	    usage();
+Les fichiers binaires ppp-2.4.4/pppd/plugins/rp-pppoe/pppoe-discovery.o et ppp-2.4.4.ref/pppd/plugins/rp-pppoe/pppoe-discovery.o sont différents.
+diff -pruN ppp-2.4.4/pppd/plugins/rp-pppoe/pppoe.h ppp-2.4.4.ref/pppd/plugins/rp-pppoe/pppoe.h
+--- ppp-2.4.4/pppd/plugins/rp-pppoe/pppoe.h	2008-12-04 17:08:44.000000000 +0100
++++ ppp-2.4.4.ref/pppd/plugins/rp-pppoe/pppoe.h	2008-12-04 17:07:05.000000000 +0100
+@@ -173,6 +173,12 @@ extern UINT16_t Eth_PPPOE_Session;
+ #define TAG_SERVICE_NAME_ERROR 0x0201
+ #define TAG_AC_SYSTEM_ERROR    0x0202
+ #define TAG_GENERIC_ERROR      0x0203
++#ifdef NB4_MAIN
++#define SUBTAG_AGENT_CIRCUIT_ID 0x01
++#define SUBTAG_AGENT_REMOTE_ID  0x02
++#define SUBTAG_OPTION_UP        0x81
++#define SUBTAG_OPTION_DOWN      0x82
++#endif /* NB4_MAIN */
+ 
+ /* Discovery phase states */
+ #define STATE_SENT_PADI     0
+@@ -267,6 +273,13 @@ typedef struct PPPoEConnectionStruct {
+     int numPADOs;		/* Number of PADO packets received */
+     PPPoETag cookie;		/* We have to send this if we get it */
+     PPPoETag relayId;		/* Ditto */
++#ifdef NB4_MAIN
++    int tr101;                /* Tells if tr101 is enabled */
++    char *circuitid;
++    char *remoteid;
++    unsigned long upstreamDatarate; /* Débit montant */
++    unsigned long downstreamDatarate; /* Débit descendant */
++#endif /* NB4_MAIN */
+ } PPPoEConnection;
+ 
+ /* Structure used to determine acceptable PADO or PADS packet */
+@@ -327,3 +340,21 @@ do {\
+ #define NOT_UNICAST(e) ((e[0] & 0x01) != 0)
+ #define BROADCAST(e) ((e[0] & e[1] & e[2] & e[3] & e[4] & e[5]) == 0xFF)
+ #define NOT_BROADCAST(e) ((e[0] & e[1] & e[2] & e[3] & e[4] & e[5]) != 0xFF)
++
++#ifdef NB4_MAIN
++/*
++ * Notes: structure basée sur les spécifications TR-101
++ * sans aucune connaissance du contexte (ou du réseau)
++ * TODO: placer la structure dans pppoe.h (respecte les standards coco)
++ * TODO: contrôler la validité de la structure avec un admin réseau (un guerrier, un vrai)
++ */
++typedef struct PPPoEVendorTagStruct {
++    unsigned int type:16;	/* tag type */
++    unsigned int length:16;	/* length of payload */
++    unsigned long int vendor:32; /* length of the tag-value */
++    unsigned char subtag:8; /* sub tag type */
++    unsigned char subtaglength:8; /* sub tag length */
++    unsigned char payload[ETH_DATA_LEN]; /* A LOT of room to spare */
++} PPPoEVendorTag;
++#endif /* NB4_MAIN */
++

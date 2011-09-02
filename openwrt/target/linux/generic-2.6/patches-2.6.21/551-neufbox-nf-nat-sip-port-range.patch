@@ -1,0 +1,14 @@
+diff --exclude=.svn -pNur linux-2.6.21.7/net/ipv4/netfilter/nf_nat_proto_udp.c linux-2.6.21.7/net/ipv4/netfilter/nf_nat_proto_udp.c
+--- linux-2.6.21.7/net/ipv4/netfilter/nf_nat_proto_udp.c	2009-04-22 16:30:06.517845491 +0200
++++ linux-2.6.21.7/net/ipv4/netfilter/nf_nat_proto_udp.c	2009-04-22 15:43:05.950343123 +0200
+@@ -65,6 +65,10 @@ udp_unique_tuple(struct nf_conntrack_tup
+ 				min = 600;
+ 				range_size = 1023 - min + 1;
+ 			}
++		} else if (ntohs(*portptr) == 5060) {
++			/* Miguel GAIO: we wanted SIP dport closed to 5060 */
++			min = 5061;
++			range_size = 65535 - 5061 + 1;
+ 		} else {
+ 			min = 1024;
+ 			range_size = 65535 - 1024 + 1;

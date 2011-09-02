@@ -1,0 +1,4 @@
+config batman-adv-userspace general
+	option interface		ath0
+	option originator_interval
+	option visualisation_srv	

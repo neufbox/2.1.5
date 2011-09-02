@@ -1,0 +1,49 @@
+--- a/loginutils/login.c
++++ b/loginutils/login.c
+@@ -27,6 +27,8 @@
+ };
+ #endif
+ 
++#define DISABLE_FEATURE_TIMEOUT
++
+ enum {
+ 	TIMEOUT = 60,
+ 	EMPTY_USERNAME_COUNT = 10,
+@@ -206,6 +208,7 @@
+ 	}
+ }
+ 
++#ifndef DISABLE_FEATURE_TIMEOUT
+ static void alarm_handler(int sig ATTRIBUTE_UNUSED)
+ {
+ 	/* This is the escape hatch!  Poor serial line users and the like
+@@ -219,6 +222,7 @@
+ 	ndelay_off(1);
+ 	_exit(EXIT_SUCCESS);
+ }
++#endif
+ 
+ int login_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+ int login_main(int argc ATTRIBUTE_UNUSED, char **argv)
+@@ -251,9 +255,10 @@
+ 
+ 	short_tty = full_tty;
+ 	username[0] = '\0';
++#ifndef DISABLE_FEATURE_TIMEOUT
+ 	signal(SIGALRM, alarm_handler);
+ 	alarm(TIMEOUT);
+-
++#endif
+ 	/* More of suid paranoia if called by non-root */
+ 	amroot = !sanitize_env_if_suid(); /* Clear dangerous stuff, set PATH */
+ 
+@@ -404,7 +409,9 @@
+ 		username[0] = '\0';
+ 	}
+ 
++#ifndef DISABLE_FEATURE_TIMEOUT
+ 	alarm(0);
++#endif
+ 	if (!amroot)
+ 		die_if_nologin();
+ 

@@ -1,0 +1,63 @@
+#!/bin/sh
+
+
+[ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
+
+[ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+[ -n "$subnet" ] && NETMASK="netmask $subnet"
+
+RESOLV_CONF="/var/resolv.conf"
+
+case "$1" in
+
+	deconfig)
+
+		echo "DHCP ANSWER [$1]"
+		ifconfig $interface 0.0.0.0
+
+	;;
+
+	bound|renew)
+
+		# tell the good news
+		echo "DHCP ANSWER [$1] ($nisdomain)"
+
+		# put ip address in a file, so that everyone know it is option 1
+		mkdir -p /var/dhcp
+		echo $ip > /var/dhcp/ip-addr
+
+		rm $RESOLV_CONF
+		for i in $dns
+		do
+			echo nameserver $i >> $RESOLV_CONF
+		done
+
+		if [ "`getinfra`" != "adsl" ]
+		then
+			ifconfig $interface $ip $BROADCAST $NETMASK
+			route add default gw $router dev $interface
+		fi
+
+		# be patient ...
+		sleep 2
+
+		# launch upgrade
+		echo " ** Assuming option 1, launching upgrade ..."
+		while [ true ]
+		do
+			upgrade && break
+			echo "    **** Upgrade failed... Launching again in 10 sec****"
+			sleep 10
+		done
+
+		exit 0
+
+	;;
+
+	leasefail|nak)
+
+		echo "DHCP ANSWER [$1]"
+		exit 0
+	;;
+
+esac

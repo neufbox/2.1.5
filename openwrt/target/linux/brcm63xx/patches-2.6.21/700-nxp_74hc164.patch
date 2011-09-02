@@ -1,0 +1,73 @@
+--- a/drivers/gpio/nxp_74hc164.c
++++ b/drivers/gpio/nxp_74hc164.c
+@@ -31,6 +31,11 @@
+ #include <linux/delay.h>
+ #include <asm/bitops.h>
+ 
++#ifdef CONFIG_BOARD_NEUFBOX4
++#include <bcm63xx_regs.h>
++#include <bcm63xx_io.h>
++#endif
++
+ struct nxp_74hc164_chip {
+ 	struct gpio_chip gpio_chip;
+ 	spinlock_t lock;
+@@ -54,6 +59,34 @@ static int nxp_74hc164_get_value(struct 
+ 	return test_bit(gpio, &nxp->data);
+ }
+ 
++#ifdef CONFIG_BOARD_NEUFBOX4
++static void nxp_74hc164_serialize(struct nxp_74hc164_chip *nxp)
++{
++	unsigned long flags;
++	int i;
++	u8 data;
++
++	if (nxp->gpio_pin_clk < 0)
++		return;
++
++	spin_lock_irqsave(&nxp->lock, flags);
++	data = nxp->data;
++	data |= 0xE0;		/* Fixup: neufbox4 logo off, brightness low */
++	for (i = 0; i < 1000; ++i) {
++		if (!(bcm_gpio_readl(GPIO_SERIAL_CTL_REG) &
++		      GPIO_SERIAL_6358_BUSY)) {
++			bcm_gpio_writel(data, GPIO_SERIAL_DATA_REG);
++			goto out;
++		}
++	}
++
++	if (i == 1000)
++		printk("%s err I/O timeout\n", "nxp-74hc164");
++
++ out:
++	spin_unlock_irqrestore(&nxp->lock, flags);
++}
++#else
+ static void nxp_74hc164_serialize(struct nxp_74hc164_chip *nxp)
+ {
+ 	unsigned long flags;
+@@ -80,6 +113,7 @@ static void nxp_74hc164_serialize(struct
+ 	}
+ 	spin_unlock_irqrestore(&nxp->lock, flags);
+ }
++#endif
+ 
+ static void nxp_74hc164_set_value(struct gpio_chip *gc, unsigned gpio, int val)
+ {
+@@ -155,6 +189,15 @@ static int nxp_74hc164_probe(struct plat
+ 	nxp->gpio_pin_data = pdev->resource[0].end;
+ 	spin_lock_init(&nxp->lock);
+ 
++#ifdef CONFIG_BOARD_NEUFBOX4
++	{
++		u32 val = bcm_gpio_readl(GPIO_MODE_REG);
++
++		val |= GPIO_MODE_6358_SERIAL_LED;
++		bcm_gpio_writel(val, GPIO_MODE_REG);
++	}
++#endif
++
+ 	err = gpio_request(nxp->gpio_pin_clk, "nxp-74hc164:clk");
+ 	if (err) {
+ 		printk("%s unable to claim gpio %u, err=%d\n",

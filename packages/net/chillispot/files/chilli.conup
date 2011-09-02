@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# logger
+logger -s -t hotspot -p daemon.info "== $0 $* =="
+
+# binaries
+EBTABLES=ebtables
+IPTABLES=iptables
+TC=tc
+
+# variables
+CLIENT_IP=$FRAMED_IP_ADDRESS
+SEDED=`echo $FRAMED_IP_ADDRESS | sed s/192.168.2.//`
+
+
+
+twin_rules () {
+
+	$IPTABLES -A HOTSPOT_FILTER_FW -s $CLIENT_IP -m state --state NEW -j HOTSPOT_FILTER_TWIN
+
+	$IPTABLES -t mangle -A POSTROUTING -s $CLIENT_IP  -j TOS --set-tos 0x01
+	$EBTABLES -A INPUT -p IPv4 -j ftos --set-ftos 0x1 --ip-src $CLIENT_IP
+
+}
+
+default_rules () {
+
+	$IPTABLES -A HOTSPOT_FILTER_FW -s $CLIENT_IP -m state --state NEW -j HOTSPOT_FILTER_PC
+
+	$IPTABLES -t mangle -A POSTROUTING -s $CLIENT_IP  -j TOS --set-tos 0x02
+	$EBTABLES -A INPUT -p IPv4 -j ftos --set-ftos 0x2 --ip-src $CLIENT_IP
+
+}
+
+if [ "$SEDED" -gt "39" ] && [ "$SEDED" -lt "51" ]
+then
+	twin_rules
+else
+	default_rules
+fi

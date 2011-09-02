@@ -1,0 +1,270 @@
+# syslog socket
+sock	/dev/log	777 0 0
+
+# shm
+dir	/dev/shm	755 0 0
+
+# terminal
+nod	/dev/ptyp0	666 0 0 c 2 0
+nod	/dev/ptyp1	666 0 0 c 2 1
+nod	/dev/ptyp2	666 0 0 c 2 2
+nod	/dev/ptyp3	666 0 0 c 2 3
+nod	/dev/ptyp4	666 0 0 c 2 4
+nod	/dev/ptyp5	666 0 0 c 2 5
+nod	/dev/ptyp6	666 0 0 c 2 6
+nod	/dev/ptyp7	666 0 0 c 2 7
+
+nod	/dev/ttyp0	666 0 0 c 3 0
+nod	/dev/ttyp1	666 0 0 c 3 1
+nod	/dev/ttyp2	666 0 0 c 3 2
+nod	/dev/ttyp3	666 0 0 c 3 3
+nod	/dev/ttyp4	666 0 0 c 3 4
+nod	/dev/ttyp5	666 0 0 c 3 5
+nod	/dev/ttyp6	666 0 0 c 3 6
+nod	/dev/ttyp7	666 0 0 c 3 7
+
+nod	/dev/tty0	666 0 0 c 4 0
+nod	/dev/tty1	666 0 0 c 4 1
+nod	/dev/tty2	666 0 0 c 4 2
+nod	/dev/tty3	666 0 0 c 4 3
+nod	/dev/tty4	666 0 0 c 4 4
+nod	/dev/tty5	666 0 0 c 4 5
+nod	/dev/tty6	666 0 0 c 4 6
+nod	/dev/tty7	666 0 0 c 4 7
+
+nod 	/dev/ttyS0	666 0 0 c 4 64
+nod 	/dev/ttyS1	666 0 0 c 4 65
+
+nod	/dev/ptmx	600 0 0 c 5 2
+
+# gprs (3g key)
+nod	/dev/ttyUSB0	666 0 0 c 188 0
+nod	/dev/ttyUSB1	666 0 0 c 188 1
+nod	/dev/ttyUSB2	666 0 0 c 188 2
+nod	/dev/ttyUSB3	666 0 0 c 188 3
+nod	/dev/ttyUSB4	666 0 0 c 188 4
+
+# flash devices
+nod	/dev/mtd0	600 0 0 c 90 0
+nod	/dev/mtd0ro	600 0 0 c 90 1
+nod	/dev/mtd1	600 0 0 c 90 2
+nod	/dev/mtd1ro	600 0 0 c 90 3
+nod	/dev/mtd2	600 0 0 c 90 4
+nod	/dev/mtd2ro	600 0 0 c 90 5
+nod	/dev/mtd3	600 0 0 c 90 6
+nod	/dev/mtd3ro	600 0 0 c 90 7
+nod	/dev/mtd4	600 0 0 c 90 8
+nod	/dev/mtd4ro	600 0 0 c 90 9
+nod	/dev/mtd5	600 0 0 c 90 10
+nod	/dev/mtd5ro	600 0 0 c 90 11
+nod	/dev/mtd6	600 0 0 c 90 12
+nod	/dev/mtd6ro	600 0 0 c 90 13
+nod	/dev/mtd7	600 0 0 c 90 14
+nod	/dev/mtd7ro	600 0 0 c 90 15
+nod	/dev/mtdblock0	600 0 0 b 31 0
+nod	/dev/mtdblock1	600 0 0 b 31 1
+nod	/dev/mtdblock2	600 0 0 b 31 2
+nod	/dev/mtdblock3	600 0 0 b 31 3
+nod	/dev/mtdblock4	600 0 0 b 31 4
+nod	/dev/mtdblock5	600 0 0 b 31 5
+nod	/dev/mtdblock6	600 0 0 b 31 6
+nod	/dev/mtdblock7	600 0 0 b 31 7
+
+# neufbox devices
+nod	/dev/leds	666 0 0 c 10 132
+nod	/dev/watchdog	600 0 0 c 10 130
+nod	/dev/events	666 0 0 c 10 222
+
+# rings log devices
+nod	/dev/ring0	666 0 0 c 229 0
+nod	/dev/ring1	666 0 0 c 229 1
+nod	/dev/ring2	666 0 0 c 229 2
+nod	/dev/ring3	666 0 0 c 229 3
+nod	/dev/ring4	666 0 0 c 229 4
+nod	/dev/ring5	666 0 0 c 229 5
+nod	/dev/ring6	666 0 0 c 229 6
+nod	/dev/ring7	666 0 0 c 229 7
+nod	/dev/ring8	666 0 0 c 229 8
+nod	/dev/ring9	666 0 0 c 229 9
+
+# gpioctl
+nod	/dev/gpio	666 0 0 c 232 0
+
+# hotpsot
+nod	/dev/tun	600 0 0 c 10 200
+slink	/dev/tun0	/dev/tun 777 0 0
+dir	/dev/net	755 0 0
+slink	/dev/net/tun	/dev/tun 777 0 0
+slink	/dev/net/tun0	/dev/tun 777 0 0
+
+# scsi device
+nod	/dev/sda	660 0 0 b 8 0
+nod	/dev/sda1	660 0 0 b 8 1
+nod	/dev/sda2	660 0 0 b 8 2
+nod	/dev/sda3	660 0 0 b 8 3
+nod	/dev/sda4	660 0 0 b 8 4
+nod	/dev/sda5	660 0 0 b 8 5
+nod	/dev/sda6	660 0 0 b 8 6
+nod	/dev/sda7	660 0 0 b 8 7
+nod	/dev/sda8	660 0 0 b 8 8
+nod	/dev/sda9	660 0 0 b 8 9
+nod	/dev/sda10	660 0 0 b 8 10
+nod	/dev/sda11	660 0 0 b 8 11
+nod	/dev/sda12	660 0 0 b 8 12
+nod	/dev/sda13	660 0 0 b 8 13
+nod	/dev/sda14	660 0 0 b 8 14
+nod	/dev/sda15	660 0 0 b 8 15
+# ...
+nod	/dev/sdb	660 0 0 b 8 16
+nod	/dev/sdb1	660 0 0 b 8 17
+nod	/dev/sdb2	660 0 0 b 8 18
+nod	/dev/sdb3	660 0 0 b 8 19
+nod	/dev/sdb4	660 0 0 b 8 20
+nod	/dev/sdb5	660 0 0 b 8 21
+nod	/dev/sdb6	660 0 0 b 8 22
+nod	/dev/sdb7	660 0 0 b 8 23
+nod	/dev/sdb8	660 0 0 b 8 24
+nod	/dev/sdb9	660 0 0 b 8 25
+nod	/dev/sdb10	660 0 0 b 8 26
+nod	/dev/sdb11	660 0 0 b 8 27
+nod	/dev/sdb12	660 0 0 b 8 28
+nod	/dev/sdb13	660 0 0 b 8 29
+nod	/dev/sdb14	660 0 0 b 8 30
+nod	/dev/sdb15	660 0 0 b 8 31
+# ...
+nod	/dev/sdc	660 0 0 b 8 32
+nod	/dev/sdc1	660 0 0 b 8 33
+nod	/dev/sdc2	660 0 0 b 8 34
+nod	/dev/sdc3	660 0 0 b 8 35
+nod	/dev/sdc4	660 0 0 b 8 36
+nod	/dev/sdc5	660 0 0 b 8 37
+nod	/dev/sdc6	660 0 0 b 8 38
+nod	/dev/sdc7	660 0 0 b 8 39
+nod	/dev/sdc8	660 0 0 b 8 40
+nod	/dev/sdc9	660 0 0 b 8 41
+nod	/dev/sdc10	660 0 0 b 8 42
+nod	/dev/sdc11	660 0 0 b 8 43
+nod	/dev/sdc12	660 0 0 b 8 44
+nod	/dev/sdc13	660 0 0 b 8 45
+nod	/dev/sdc14	660 0 0 b 8 46
+nod	/dev/sdc15	660 0 0 b 8 47
+# ..
+nod	/dev/sdd	660 0 0 b 8 48
+nod	/dev/sdd1	660 0 0 b 8 49
+nod	/dev/sdd2	660 0 0 b 8 50
+nod	/dev/sdd3	660 0 0 b 8 51
+nod	/dev/sdd4	660 0 0 b 8 52
+nod	/dev/sdd5	660 0 0 b 8 53
+nod	/dev/sdd6	660 0 0 b 8 54
+nod	/dev/sdd7	660 0 0 b 8 55
+nod	/dev/sdd8	660 0 0 b 8 56
+nod	/dev/sdd9	660 0 0 b 8 57
+nod	/dev/sdd10	660 0 0 b 8 58
+nod	/dev/sdd11	660 0 0 b 8 59
+nod	/dev/sdd12	660 0 0 b 8 60
+nod	/dev/sdd13	660 0 0 b 8 61
+nod	/dev/sdd14	660 0 0 b 8 62
+nod	/dev/sdd15	660 0 0 b 8 63
+# ...
+
+
+# usb printer
+dir	/dev/usb	755 0 0
+nod	/dev/usb/lp0	644 0 0 c 180 0
+nod	/dev/usb/lp1	644 0 0 c 180 1
+nod	/dev/usb/lp2	644 0 0 c 180 2
+nod	/dev/usb/lp3	644 0 0 c 180 3
+# webui access inklevel
+nod	/dev/printer0	666 0 0 c 180 0
+slink	/dev/lp0	/dev/usb/lp0 777 0 0
+slink	/dev/lp1	/dev/usb/lp1 777 0 0
+slink	/dev/lp2	/dev/usb/lp2 777 0 0
+slink	/dev/lp3	/dev/usb/lp3 777 0 0
+
+# NEUFBOX5 SPECIFIC DEVICES
+
+# mtd symbolic links
+slink	/dev/mtd-bootloader	/dev/mtd0 777 0 0
+slink	/dev/mtdblock-bootloader /dev/mtdblock0 777 0 0
+slink	/dev/mtd-bootcfg	/dev/mtd1 777 0 0
+slink	/dev/mtdblock-bootcfg	/dev/mtdblock1 777 0 0
+slink	/dev/mtd-main		/dev/mtd2 777 0 0
+slink	/dev/mtdblock-main	/dev/mtdblock2 777 0 0
+slink	/dev/mtd-rescue		/dev/mtd3 777 0 0
+slink	/dev/mtdblock-rescue	/dev/mtdblock3 777 0 0
+slink	/dev/mtd-config		/dev/mtd4 777 0 0
+slink	/dev/mtdblock-config	/dev/mtdblock4 777 0 0
+slink   /dev/mtd-flash          /dev/mtd5 777 0 0
+slink   /dev/mtdblock-flash     /dev/mtdblock5 777 0 0
+
+# sfp eeprom
+nod	/dev/i2c-0	600 0 0 c 89 0
+
+# d2teck message queues
+dir	/dev/d2		755 0 0
+nod	/dev/d2/mq0	666 0 0 c 252 0
+nod	/dev/d2/mq1	666 0 0 c 252 1
+nod	/dev/d2/mq2	666 0 0 c 252 2
+nod	/dev/d2/mq3	666 0 0 c 252 3
+nod	/dev/d2/mq4	666 0 0 c 252 4
+nod	/dev/d2/mq5	666 0 0 c 252 5
+nod	/dev/d2/mq6	666 0 0 c 252 6
+nod	/dev/d2/mq7	666 0 0 c 252 7
+nod	/dev/d2/mq8	666 0 0 c 252 8
+nod	/dev/d2/mq9	666 0 0 c 252 9
+nod	/dev/d2/mq10	666 0 0 c 252 10
+nod	/dev/d2/mq11	666 0 0 c 252 11
+nod	/dev/d2/mq12	666 0 0 c 252 12
+nod	/dev/d2/mq13	666 0 0 c 252 13
+nod	/dev/d2/mq14	666 0 0 c 252 14
+nod	/dev/d2/mq15	666 0 0 c 252 15
+nod	/dev/d2/mq16	666 0 0 c 252 16
+nod	/dev/d2/mq17	666 0 0 c 252 17
+nod	/dev/d2/mq18	666 0 0 c 252 18
+nod	/dev/d2/mq19	666 0 0 c 252 19
+nod	/dev/d2/mq20	666 0 0 c 252 20
+nod	/dev/d2/mq21	666 0 0 c 252 21
+nod	/dev/d2/mq22	666 0 0 c 252 22
+nod	/dev/d2/mq23	666 0 0 c 252 23
+nod	/dev/d2/mq24	666 0 0 c 252 24
+nod	/dev/d2/mq25	666 0 0 c 252 25
+nod	/dev/d2/mq26	666 0 0 c 252 26
+nod	/dev/d2/mq27	666 0 0 c 252 27
+nod	/dev/d2/mq28	666 0 0 c 252 28
+nod	/dev/d2/mq29	666 0 0 c 252 29
+nod	/dev/d2/mq30	666 0 0 c 252 30
+nod	/dev/d2/mq31	666 0 0 c 252 31
+nod	/dev/d2/mq32	666 0 0 c 252 32
+nod	/dev/d2/mq33	666 0 0 c 252 33
+nod	/dev/d2/mq34	666 0 0 c 252 34
+nod	/dev/d2/mq35	666 0 0 c 252 35
+nod	/dev/d2/mq36	666 0 0 c 252 36
+nod	/dev/d2/mq37	666 0 0 c 252 37
+nod	/dev/d2/mq38	666 0 0 c 252 38
+nod	/dev/d2/mq39	666 0 0 c 252 39
+nod	/dev/d2/mq40	666 0 0 c 252 40
+nod	/dev/d2/mq41	666 0 0 c 252 41
+nod	/dev/d2/mq42	666 0 0 c 252 42
+nod	/dev/d2/mq43	666 0 0 c 252 43
+nod	/dev/d2/mq44	666 0 0 c 252 44
+nod	/dev/d2/mq45	666 0 0 c 252 45
+nod	/dev/d2/mq46	666 0 0 c 252 46
+nod	/dev/d2/mq47	666 0 0 c 252 47
+nod	/dev/d2/mq48	666 0 0 c 252 48
+nod	/dev/d2/mq49	666 0 0 c 252 49
+nod	/dev/d2/mq50	666 0 0 c 252 50
+nod	/dev/d2/mq51	666 0 0 c 252 51
+nod	/dev/d2/mq52	666 0 0 c 252 52
+nod	/dev/d2/mq53	666 0 0 c 252 53
+nod	/dev/d2/mq54	666 0 0 c 252 54
+nod	/dev/d2/mq55	666 0 0 c 252 55
+nod	/dev/d2/mq56	666 0 0 c 252 56
+nod	/dev/d2/mq57	666 0 0 c 252 57
+nod	/dev/d2/mq58	666 0 0 c 252 58
+nod	/dev/d2/mq59	666 0 0 c 252 59
+nod	/dev/d2/mq60	666 0 0 c 252 60
+nod	/dev/d2/mq61	666 0 0 c 252 61
+nod	/dev/d2/mq62	666 0 0 c 252 62
+nod	/dev/d2/mq63	666 0 0 c 252 63
+nod	/dev/d2/mq64	666 0 0 c 252 64
+nod	/dev/tictest	666 0 0 c 250 0

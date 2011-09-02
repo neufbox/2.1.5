@@ -1,0 +1,32 @@
+Index: linux-2.6.21.7/net/ipv4/ip_output.c
+===================================================================
+--- linux-2.6.21.7.orig/net/ipv4/ip_output.c	2009-01-27 10:27:55.120240362 +0100
++++ linux-2.6.21.7/net/ipv4/ip_output.c	2009-01-27 10:44:27.576229584 +0100
+@@ -358,6 +358,13 @@
+ 	/* Add an IP checksum. */
+ 	ip_send_check(iph);
+ 
++	/* Efixo patch
++	 * Catch TCP datagram where TOS is 0xB4
++	 * (typically autoconf/wget on NB4/NB5)
++	 */
++	if (iph->tos == 0x2D << 2)
++		skb->mark = 3;
++	
+ 	skb->priority = sk->sk_priority;
+ 
+ 	return NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
+@@ -1252,6 +1259,13 @@
+ 	iph->daddr = rt->rt_dst;
+ 	ip_send_check(iph);
+ 
++	/* Efixo patch
++	 * Catch UDP datagram where TOS is 0xB4
++	 * (typically voip MGCP & SIP on NB4/NB5)
++	 */
++	if (iph->tos == 0x2D << 2)
++		skb->mark = 3;
++
+ 	skb->priority = sk->sk_priority;
+ 	skb->dst = dst_clone(&rt->u.dst);
+ 

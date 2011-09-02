@@ -1,0 +1,39 @@
+#!/bin/sh
+
+DNS1=$1
+DNS2=$2
+
+LAN_IP=`nvram get lan_ipaddr`
+LAN_NETMASK=`nvram get lan_netmask`
+IPTABLES_DEST=`net $LAN_IP $LAN_NETMASK`
+
+echo "[route] LAN_IP=[$LAN_IP] LAN_NETMASK=[$LAN_NETMASK] IPTABLES_DEST=[$IPTABLES_DEST]" >> /var/log/debug
+
+# Forwarding DNS server.
+if [ ! -z $DNS1 ]
+then
+	ping -c 1 $DNS1 > /dev/null 2>&1
+	if [ "$?" == "0" ]
+	then
+		iptables -t nat -I PREROUTING -p udp -d $IPTABLES_DEST --dport 53 -j DNAT --to $DNS1
+	fi
+
+else
+
+	echo "Primary DNS Server Failed, switch ton Secondary"
+
+	if [ ! -z $DNS2 ]
+	then
+	ping -c 1 $DNS2 > /dev/null 2>&1
+
+		if [ "$?" == "0" ]
+		then
+			iptables -t nat -I PREROUTING -p udp -d $IPTABLES_DEST --dport 53 -j DNAT --to $DNS2
+
+		else
+
+		echo "No DNS Servers Alive ... "
+		fi
+
+	fi
+fi

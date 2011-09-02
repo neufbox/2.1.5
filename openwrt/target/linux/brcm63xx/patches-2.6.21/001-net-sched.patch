@@ -1,0 +1,565 @@
+diff -pNur linux-2.6.21.7/include/linux/if_arp.h linux-2.6.21.7/include/linux/if_arp.h
+--- linux-2.6.21.7/include/linux/if_arp.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/linux/if_arp.h	2008-06-25 18:34:06.000000000 +0200
+@@ -40,6 +40,10 @@
+ #define ARPHRD_METRICOM	23		/* Metricom STRIP (new IANA id)	*/
+ #define	ARPHRD_IEEE1394	24		/* IEEE 1394 IPv4 - RFC 2734	*/
+ #define ARPHRD_EUI64	27		/* EUI-64                       */
++#if defined(CONFIG_MIPS_BRCM)
++#define ARPHRD_CPCS     28              /* CPCS                         */
++#define ARPHRD_DSL      29              /* ADSL                         */
++#endif
+ #define ARPHRD_INFINIBAND 32		/* InfiniBand			*/
+ 
+ /* Dummy types for non ARP hardware */
+diff -pNur linux-2.6.21.7/include/linux/if_ether.h linux-2.6.21.7/include/linux/if_ether.h
+--- linux-2.6.21.7/include/linux/if_ether.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/linux/if_ether.h	2008-06-25 18:34:10.000000000 +0200
+@@ -75,6 +75,8 @@
+ #define ETH_P_AOE	0x88A2		/* ATA over Ethernet		*/
+ #define ETH_P_TIPC	0x88CA		/* TIPC 			*/
+ 
++#define ETH_P_8021AG	0x8902		/* 802.1ag Connectivity Fault Mgmt */
++
+ /*
+  *	Non DIX types. Won't clash for 1500 types.
+  */
+diff -pNur linux-2.6.21.7/include/linux/if.h linux-2.6.21.7/include/linux/if.h
+--- linux-2.6.21.7/include/linux/if.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/linux/if.h	2008-06-25 18:34:10.000000000 +0200
+@@ -61,6 +61,12 @@
+ #define IFF_MASTER_ALB	0x10		/* bonding master, balance-alb.	*/
+ #define IFF_BONDING	0x20		/* bonding master or slave	*/
+ #define IFF_SLAVE_NEEDARP 0x40		/* need ARPs for validation	*/
++#if defined(CONFIG_MIPS_BRCM)
++#define IFF_HW_SWITCH 0x100
++#define IFF_RSMUX      0x200             /* smux real interface          */
++#define IFF_OSMUX      0x400             /* smux overlay interface       */
++#define IFF_WANDEV   0x800               /* avoid WAN bridge traffic leaking */
++#endif
+ 
+ #define IF_GET_IFACE	0x0001		/* for querying only */
+ #define IF_GET_PROTO	0x0002
+diff -pNur linux-2.6.21.7/include/linux/if_vlan.h linux-2.6.21.7/include/linux/if_vlan.h
+--- linux-2.6.21.7/include/linux/if_vlan.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/linux/if_vlan.h	2008-06-25 18:34:10.000000000 +0200
+@@ -136,6 +136,9 @@ struct vlan_dev_info {
+ 	unsigned long cnt_inc_headroom_on_tx; /* How many times did we have to grow the skb on TX. */
+ 	unsigned long cnt_encap_on_xmit;      /* How many times did we have to encapsulate the skb on TX. */
+ 	struct net_device_stats dev_stats; /* Device stats (rx-bytes, tx-pkts, etc...) */
++#if defined(CONFIG_MIPS_BRCM)
++    int nfmark_to_priority;
++#endif	
+ };
+ 
+ #define VLAN_DEV_INFO(x) ((struct vlan_dev_info *)(x->priv))
+@@ -393,6 +396,10 @@ enum vlan_ioctl_cmds {
+ 	SET_VLAN_FLAG_CMD,
+ 	GET_VLAN_REALDEV_NAME_CMD, /* If this works, you know it's a VLAN device, btw */
+ 	GET_VLAN_VID_CMD /* Get the VID of this VLAN (specified by name) */
++#if defined(CONFIG_MIPS_BRCM)
++	,
++	SET_VLAN_NFMARK_TO_PRIORITY_CMD
++#endif
+ };
+ 
+ enum vlan_name_types {
+@@ -414,6 +421,9 @@ struct vlan_ioctl_args {
+ 		unsigned int name_type;
+ 		unsigned int bind_type;
+ 		unsigned int flag; /* Matches vlan_dev_info flags */
++#if defined(CONFIG_MIPS_BRCM)
++		int nfmark_to_priority;
++#endif
+         } u;
+ 
+ 	short vlan_qos;   
+diff --exclude=.svn -pNur linux-2.6.21.7/net/8021q/vlan.c linux-2.6.21.7/net/8021q/vlan.c
+--- linux-2.6.21.7/net/8021q/vlan.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/8021q/vlan.c	2008-10-13 18:23:39.000000000 +0200
+@@ -526,6 +526,9 @@ static struct net_device *register_vlan_
+ 	VLAN_DEV_INFO(new_dev)->real_dev = real_dev;
+ 	VLAN_DEV_INFO(new_dev)->dent = NULL;
+ 	VLAN_DEV_INFO(new_dev)->flags = 1;
++#if defined(CONFIG_MIPS_BRCM_DISABLED)
++	VLAN_DEV_INFO(new_dev)->nfmark_to_priority = -1;
++#endif
+ 
+ #ifdef VLAN_DEBUG
+ 	printk(VLAN_DBG "About to go find the group for idx: %i\n",
+@@ -730,6 +733,13 @@ static int vlan_ioctl_handler(void __use
+ 						   args.vlan_qos);
+ 		break;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++	case SET_VLAN_NFMARK_TO_PRIORITY_CMD:
++		err = vlan_dev_set_nfmark_to_priority(args.device1,
++						   args.u.skb_priority);
++		break;
++#endif        
++
+ 	case SET_VLAN_FLAG_CMD:
+ 		if (!capable(CAP_NET_ADMIN))
+ 			return -EPERM;
+diff --exclude=.svn -pNur linux-2.6.21.7/net/8021q/vlan_dev.c linux-2.6.21.7/net/8021q/vlan_dev.c
+--- linux-2.6.21.7/net/8021q/vlan_dev.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/8021q/vlan_dev.c	2008-10-13 18:23:39.000000000 +0200
+@@ -37,6 +37,12 @@
+ #include <linux/if_vlan.h>
+ #include <net/ip.h>
+ 
++#if defined(CONFIG_MIPS_BRCM)
++#define DOUBLE_TAGGING
++#endif
++
++/* FIXME: Layer 2 Packet trace CONFIG_L2PT */
++
+ /*
+  *	Rebuild the Ethernet MAC header. This is called after an ARP
+  *	(or in future other address resolution) has completed on this
+@@ -145,6 +151,9 @@ int vlan_skb_recv(struct sk_buff *skb, s
+ 
+ 	rcu_read_lock();
+ 	skb->dev = __find_vlan_dev(dev, vid);
++#if defined(CONFIG_MIPS_BRCM)
++	if (!skb->dev) skb->dev = __find_vlan_dev(dev, 0);
++#endif
+ 	if (!skb->dev) {
+ 		rcu_read_unlock();
+ 
+@@ -301,6 +310,41 @@ int vlan_skb_recv(struct sk_buff *skb, s
+ 	return 0;
+ }
+ 
++#if defined(CONFIG_MIPS_BRCM)
++
++static inline unsigned short vlan_dev_get_egress_qos_mask(struct net_device* dev,
++							  struct sk_buff* skb)
++{
++	struct vlan_priority_tci_mapping *mp;
++    int ntp;
++
++    ntp=VLAN_DEV_INFO(dev)->nfmark_to_priority;
++    /* bits 13,14,15 hold the QoS 8021p value only if the valid bit (12) is set */
++    if ((ntp != -1) && (skb->mark & 0x1000)) {
++       unsigned short vlan_qos;
++
++       vlan_qos = (skb->mark>>ntp)<<13 & 0xe000;
++       /* invalidate the QoS 8021p priority mark by clearing the valid bit (12) */
++       skb->mark &= 0xffffefff;
++       return vlan_qos;
++    }
++    else {
++        mp = VLAN_DEV_INFO(dev)->egress_priority_map[(skb->priority & 0xF)];
++
++    	while (mp) {
++    		if (mp->priority == skb->priority) {
++    			return mp->vlan_qos; /* This should already be shifted to mask
++    					      * correctly with the VLAN's TCI
++    					      */
++    		}
++    		mp = mp->next;
++    	}
++    }
++	return 0;
++}
++
++#else
++
+ static inline unsigned short vlan_dev_get_egress_qos_mask(struct net_device* dev,
+ 							  struct sk_buff* skb)
+ {
+@@ -318,6 +362,8 @@ static inline unsigned short vlan_dev_ge
+ 	return 0;
+ }
+ 
++#endif
++
+ /*
+  *	Create the VLAN header for an arbitrary protocol layer
+  *
+@@ -364,7 +410,20 @@ int vlan_dev_hard_header(struct sk_buff 
+ 		 * VLAN ID	 12 bits (low bits)
+ 		 *
+ 		 */
++#if defined(CONFIG_MIPS_BRCM)
++      /* If vlan Id is set by QoS rule, use it instead of the default
++       * vlanMux Id set for the interface.
++       */
++      if (skb->vtag & 0x1000) {
++         veth_TCI = skb->vtag & 0xfff;
++         /* invalidate the QoS vlan id mark by clearing the valid bit (12) */
++         skb->vtag &= 0xefff;
++      }
++      else
++			veth_TCI = VLAN_DEV_INFO(dev)->vlan_id;
++#else
+ 		veth_TCI = VLAN_DEV_INFO(dev)->vlan_id;
++#endif
+ 		veth_TCI |= vlan_dev_get_egress_qos_mask(dev, skb);
+ 
+ 		vhdr->h_vlan_TCI = htons(veth_TCI);
+@@ -437,6 +496,112 @@ int vlan_dev_hard_header(struct sk_buff 
+ 	return rc;
+ }
+ 
++#if defined(CONFIG_MIPS_BRCM_DISABLE)
++/* function was modified to support multiple VLAN tags */
++int vlan_dev_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
++{
++   struct net_device *orig_dev = dev;
++	struct net_device_stats *stats = vlan_dev_get_stats(orig_dev);
++	struct vlan_ethhdr *veth = (struct vlan_ethhdr *)(skb->data);
++
++	/* Handle non-VLAN frames if they are sent to us, for example by DHCP.
++	 *
++	 * NOTE: THIS ASSUMES DIX ETHERNET, SPECIFICALLY NOT SUPPORTING
++	 * OTHER THINGS LIKE FDDI/TokenRing/802.3 SNAPs...
++	 */
++#ifdef DOUBLE_TAGGING
++   /* if this is a vlan frame, and its vlan tag had been remarked by QoS matching
++    * rule, we want to restore its original vlan tag before doing double tagging.
++    * The frame's original vlan tag was saved in skb->vtag_save.
++    */
++	if ((veth->h_vlan_proto == __constant_htons(ETH_P_8021Q)) &&
++	    ((skb->mark & 0x1000) || (skb->vtag & 0x1000))) {
++      /* see if skb->vtag_save is valid */
++      if (skb->vtag_save & 0x1000) {
++		   unsigned short veth_TCI = ntohs(veth->h_vlan_TCI);
++
++         /* restore the original frame vlan tag.
++          * keep the CFI bit (12). Only restore the 8021p priority and vlan id.
++          */
++         veth_TCI = (veth_TCI & 0x1000) | (skb->vtag_save & 0xefff);
++		   veth->h_vlan_TCI = htons(veth_TCI);
++         /* invalidate skb->vtag_save by clearing the valid bit (12) */
++         skb->vtag_save &= 0xefff;
++      }
++   }
++#else
++   /* single tagging */
++	if (veth->h_vlan_proto != __constant_htons(ETH_P_8021Q))
++#endif
++	{
++		int orig_headroom;
++		unsigned short veth_TCI;
++                
++		/* This is not a VLAN frame...but we can fix that! */
++		VLAN_DEV_INFO(orig_dev)->cnt_encap_on_xmit++;
++
++#ifdef VLAN_DEBUG
++		printk(VLAN_DBG "%s: proto to encap: 0x%hx (hbo)\n",
++				__FUNCTION__, htons(veth->h_vlan_proto));
++#endif
++		do {
++			veth = (struct vlan_ethhdr *)(skb->data);
++
++			orig_headroom = skb_headroom(skb);
++
++			/* Construct the second two bytes. This field looks something
++			 * like:
++			 * usr_priority: 3 bits	 (high bits)
++			 * CFI		 1 bit
++			 * VLAN ID	 12 bits (low bits)
++			 */
++         /* If vlan Id is set by QoS rule, use it instead of the default
++          * vlanMux Id set for the interface.
++          */
++         if (skb->vtag & 0x1000) {
++            veth_TCI = skb->vtag & 0xfff;
++            /* invalidate the QoS vlan id mark by clearing the valid bit (12) */
++            skb->vtag &= 0xefff;
++         }
++         else
++			   veth_TCI = VLAN_DEV_INFO(dev)->vlan_id;
++			veth_TCI |= vlan_dev_get_egress_qos_mask(dev, skb);
++			
++			skb = __vlan_put_tag(skb, veth_TCI);
++			if (!skb) {
++				stats->tx_dropped++;
++				return 0;
++			}
++
++			if (orig_headroom < VLAN_HLEN) {
++				VLAN_DEV_INFO(orig_dev)->cnt_inc_headroom_on_tx++;
++			}
++
++			/* get the next real device */
++			dev = VLAN_DEV_INFO(dev)->real_dev;
++
++		} while(dev->priv_flags & IFF_802_1Q_VLAN);
++	}
++
++#ifdef VLAN_DEBUG
++	printk(VLAN_DBG "%s: about to send skb: %p to dev: %s\n",
++		__FUNCTION__, skb, skb->dev->name);
++	printk(VLAN_DBG "  %2hx.%2hx.%2hx.%2xh.%2hx.%2hx %2hx.%2hx.%2hx.%2hx.%2hx.%2hx %4hx %4hx %4hx\n",
++	       veth->h_dest[0], veth->h_dest[1], veth->h_dest[2], veth->h_dest[3], veth->h_dest[4], veth->h_dest[5],
++	       veth->h_source[0], veth->h_source[1], veth->h_source[2], veth->h_source[3], veth->h_source[4], veth->h_source[5],
++	       veth->h_vlan_proto, veth->h_vlan_TCI, veth->h_vlan_encapsulated_proto);
++#endif
++
++	stats->tx_packets++; /* for statics only */
++	stats->tx_bytes += skb->len;
++
++   skb->dev = dev;
++	dev_queue_xmit(skb);
++
++	return 0;
++}
++#else /* #if defined(CONFIG_MIPS_BRCM) */
++/* Original transmit function */
+ int vlan_dev_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
+ {
+ 	struct net_device_stats *stats = vlan_dev_get_stats(dev);
+@@ -447,8 +612,37 @@ int vlan_dev_hard_start_xmit(struct sk_b
+ 	 * NOTE: THIS ASSUMES DIX ETHERNET, SPECIFICALLY NOT SUPPORTING
+ 	 * OTHER THINGS LIKE FDDI/TokenRing/802.3 SNAPs...
+ 	 */
++#if defined(CONFIG_MIPS_BRCM)
++#ifdef DOUBLE_TAGGING
++   /* if this is a vlan frame, and its vlan tag had been remarked by QoS matching
++    * rule, we want to restore its original vlan tag before doing double tagging.
++    * The frame's original vlan tag was saved in skb->vtag_save.
++    */
++	if ((veth->h_vlan_proto == __constant_htons(ETH_P_8021Q)) &&
++	    ((skb->mark & 0x1000) || (skb->vtag & 0x1000))) {
++      /* see if skb->vtag_save is valid */
++      if (skb->vtag_save & 0x1000) {
++		   unsigned short veth_TCI = ntohs(veth->h_vlan_TCI);
++
++         /* restore the original frame vlan tag.
++          * keep the CFI bit (12). Only restore the 8021p priority and vlan id.
++          */
++         veth_TCI = (veth_TCI & 0x1000) | (skb->vtag_save & 0xefff);
++		   veth->h_vlan_TCI = htons(veth_TCI);
++         /* invalidate skb->vtag_save by clearing the valid bit (12) */
++         skb->vtag_save &= 0xefff;
++      }
++   }
++#else
++   /* single tagging */
++	if (veth->h_vlan_proto != __constant_htons(ETH_P_8021Q))
++#endif
+ 
+-	if (veth->h_vlan_proto != __constant_htons(ETH_P_8021Q)) {
++#else
++   /* original code */
++	if (veth->h_vlan_proto != __constant_htons(ETH_P_8021Q))
++#endif
++	{
+ 		int orig_headroom = skb_headroom(skb);
+ 		unsigned short veth_TCI;
+ 
+@@ -465,7 +659,20 @@ int vlan_dev_hard_start_xmit(struct sk_b
+ 		 * CFI		 1 bit
+ 		 * VLAN ID	 12 bits (low bits)
+ 		 */
+-		veth_TCI = VLAN_DEV_INFO(dev)->vlan_id;
++#if defined(CONFIG_MIPS_BRCM)
++      /* If vlan Id is set by QoS rule, use it instead of the default
++       * vlanMux Id set for the interface.
++       */
++      if (skb->vtag & 0x1000) {
++         veth_TCI = skb->vtag & 0xfff;
++         /* invalidate the QoS vlan id mark by clearing the valid bit (12) */
++         skb->vtag &= 0xefff;
++      }
++      else
++			veth_TCI = VLAN_DEV_INFO(dev)->vlan_id;
++#else
++	   veth_TCI = VLAN_DEV_INFO(dev)->vlan_id;
++#endif
+ 		veth_TCI |= vlan_dev_get_egress_qos_mask(dev, skb);
+ 
+ 		skb = __vlan_put_tag(skb, veth_TCI);
+@@ -496,6 +703,7 @@ int vlan_dev_hard_start_xmit(struct sk_b
+ 
+ 	return 0;
+ }
++#endif /* #if defined(CONFIG_MIPS_BRCM) */
+ 
+ int vlan_dev_hwaccel_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
+ {
+@@ -702,6 +910,36 @@ int vlan_dev_set_mac_address(struct net_
+ 	return 0;
+ }
+ 
++#if defined(CONFIG_MIPS_BRCM)
++int vlan_dev_set_nfmark_to_priority(char *dev_name, int nfmark_to_priority)
++{
++	struct net_device *dev = dev_get_by_name(dev_name);
++
++	if (dev) {
++        if (dev->priv_flags & IFF_802_1Q_VLAN) {
++            if (nfmark_to_priority>=-1 && nfmark_to_priority <=29) {
++                VLAN_DEV_INFO(dev)->nfmark_to_priority = nfmark_to_priority;
++                dev_put(dev);
++                return 0;
++            }
++            else {
++    		    printk("invalid nfmark_to_priority\n");
++            }
++        }
++        else {
++            printk(KERN_ERR 
++             "%s: %s is not a vlan device, priv_flags: %hX.\n",
++            __FUNCTION__, dev->name, dev->priv_flags);
++        }    
++    }
++    else {
++		printk(KERN_ERR  "%s: Could not find device: %s\n", __FUNCTION__, dev_name);
++    }
++    dev_put(dev);
++    return -EINVAL;
++}
++#endif
++
+ static inline int vlan_dmi_equals(struct dev_mc_list *dmi1,
+ 				  struct dev_mc_list *dmi2)
+ {
+diff --exclude=.svn -pNur linux-2.6.21.7/net/sched/Makefile linux-2.6.21.7/net/sched/Makefile
+--- linux-2.6.21.7/net/sched/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/sched/Makefile	2008-10-13 18:23:39.000000000 +0200
+@@ -2,6 +2,10 @@
+ # Makefile for the Linux Traffic Control Unit.
+ #
+ 
++ifneq ($(strip $(BRCM_KERNEL_NETQOS)),)
++CFLAGS  += -DSUPPORT_TC
++endif
++
+ obj-y	:= sch_generic.o
+ 
+ obj-$(CONFIG_NET_SCHED)		+= sch_api.o sch_blackhole.o
+diff --exclude=.svn -pNur linux-2.6.21.7/net/sched/sch_generic.c linux-2.6.21.7/net/sched/sch_generic.c
+--- linux-2.6.21.7/net/sched/sch_generic.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/sched/sch_generic.c	2008-10-13 18:23:39.000000000 +0200
+@@ -607,6 +607,14 @@ void dev_shutdown(struct net_device *dev
+ #endif
+ 	BUG_TRAP(!timer_pending(&dev->watchdog_timer));
+ 	qdisc_unlock_tree(dev);
++
++	/* decrement on ppp net work device reference count since TC (pfifo) is not releasing it. */	
++#if defined(SUPPORT_TC)	
++	if (strstr(dev->name, "ppp_") && atomic_read(&dev->refcnt) > 1) {
++		printk("dev_shutdown, dec ppp device refcnt, dev->refcnt=%d\n", atomic_read(&dev->refcnt));
++		dev_put(dev);
++	}
++#endif
+ }
+ 
+ EXPORT_SYMBOL(netif_carrier_on);
+diff --exclude=.svn -pNur linux-2.6.21.7/net/sched/sch_htb.c linux-2.6.21.7/net/sched/sch_htb.c
+--- linux-2.6.21.7/net/sched/sch_htb.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/sched/sch_htb.c	2008-10-14 09:36:11.000000000 +0200
+@@ -53,6 +53,9 @@
+ #include <net/sock.h>
+ #include <net/pkt_sched.h>
+ #include <linux/rbtree.h>
++#if defined(CONFIG_MIPS_BRCM)
++#include <linux/blog.h>
++#endif
+ 
+ /* HTB algorithm.
+     Author: devik@cdi.cz
+@@ -1018,6 +1021,9 @@ static struct sk_buff *htb_dequeue(struc
+ 			if (likely(skb != NULL)) {
+ 				sch->q.qlen--;
+ 				sch->flags &= ~TCQ_F_THROTTLED;
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++				blog_skip(skb);
++#endif
+ 				goto fin;
+ 			}
+ 		}
+diff --exclude=.svn -pNur linux-2.6.21.7/net/socket.c linux-2.6.21.7/net/socket.c
+--- linux-2.6.21.7/net/socket.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/socket.c	2008-10-13 18:23:39.000000000 +0200
+@@ -782,6 +782,20 @@ void vlan_ioctl_set(int (*hook) (void __
+ 
+ EXPORT_SYMBOL(vlan_ioctl_set);
+ 
++#if defined(CONFIG_MIPS_BRCM)
++static DEFINE_MUTEX(smux_ioctl_mutex);
++static int (*smux_ioctl_hook) (void __user *arg);
++
++void smux_ioctl_set(int (*hook) (void __user *))
++{
++	mutex_lock(&smux_ioctl_mutex);
++	smux_ioctl_hook = hook;
++	mutex_unlock(&smux_ioctl_mutex);
++}
++
++EXPORT_SYMBOL(smux_ioctl_set);
++#endif /* CONFIG_MIPS_BRCM */
++
+ static DEFINE_MUTEX(dlci_ioctl_mutex);
+ static int (*dlci_ioctl_hook) (unsigned int, void __user *);
+ 
+@@ -851,6 +865,17 @@ static long sock_ioctl(struct file *file
+ 				err = vlan_ioctl_hook(argp);
+ 			mutex_unlock(&vlan_ioctl_mutex);
+ 			break;
++#if defined(CONFIG_MIPS_BRCM)
++		case SIOCSIFSMUX:
++			err = -ENOPKG;
++			if(!smux_ioctl_hook)
++				request_module("smux");
++			mutex_lock(&smux_ioctl_mutex);
++			if(smux_ioctl_hook)
++				err = smux_ioctl_hook(argp);
++			mutex_unlock(&smux_ioctl_mutex);
++			break;
++#endif /* CONFIG_MIPS_BRCM */
+ 		case SIOCADDDLCI:
+ 		case SIOCDELDLCI:
+ 			err = -ENOPKG;
+@@ -1061,33 +1086,37 @@ static int __sock_create(int family, int
+ 	   deadlock in module load.
+ 	 */
+ 	if (family == PF_INET && type == SOCK_PACKET) {
+-		static int warned;
++#if defined(CONFIG_MIPS_BRCM)
++		family = PF_PACKET;
++#else
++		static int warned; 
+ 		if (!warned) {
+ 			warned = 1;
+ 			printk(KERN_INFO "%s uses obsolete (PF_INET,SOCK_PACKET)\n",
+ 			       current->comm);
+ 		}
+ 		family = PF_PACKET;
++#endif
+ 	}
+ 
+ 	err = security_socket_create(family, type, protocol, kern);
+ 	if (err)
+ 		return err;
+-
+-	/*
+-	 *	Allocate the socket and allow the family to set things up. if
+-	 *	the protocol is 0, the family is instructed to select an appropriate
+-	 *	default.
+-	 */
++
++	/*
++	 *	Allocate the socket and allow the family to set things up. if
++	 *	the protocol is 0, the family is instructed to select an appropriate
++	 *	default.
++	 */
+ 	sock = sock_alloc();
+ 	if (!sock) {
+ 		if (net_ratelimit())
+-			printk(KERN_WARNING "socket: no more sockets\n");
++			printk(KERN_WARNING "socket: no more sockets\n");
+ 		return -ENFILE;	/* Not exactly a match, but its the
+-				   closest posix thing */
++				   closest posix thing */
+ 	}
+ 
+-	sock->type = type;
++	sock->type = type;
+ 
+ #if defined(CONFIG_KMOD)
+ 	/* Attempt to load a protocol module if the find failed.

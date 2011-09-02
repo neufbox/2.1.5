@@ -1,0 +1,21 @@
+#!/bin/sh
+
+[ "$INTERFACE" != "tun0" ] && exit 0
+
+addif() {
+	/etc/autoconf/hotspot tun_up
+}
+
+delif() {
+	/etc/autoconf/hotspot tun_down
+}
+
+case "$ACTION" in
+	add|register)
+		addif
+	;;
+	remove|unregister)
+		delif
+	;;
+esac
+

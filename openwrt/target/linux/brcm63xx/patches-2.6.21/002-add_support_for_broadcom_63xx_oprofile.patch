@@ -1,0 +1,133 @@
+diff -pNur linux-2.6.21.7/arch/mips/oprofile/common.c linux-2.6.21.7/arch/mips/oprofile/common.c
+--- linux-2.6.21.7/arch/mips/oprofile/common.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/oprofile/common.c	2008-06-25 18:34:02.000000000 +0200
+@@ -14,8 +13,12 @@
+ 
+ #include "op_impl.h"
+ 
+-extern struct op_mips_model op_model_mipsxx_ops __attribute__((weak));
+-extern struct op_mips_model op_model_rm9000_ops __attribute__((weak));
++extern struct op_mips_model op_model_mipsxx __attribute__((weak));
++extern struct op_mips_model op_model_rm9000 __attribute__((weak));
++
++#ifdef CONFIG_MIPS_BRCM
++extern struct op_mips_model op_model_bcm_optimer __attribute__((weak));
++#endif
+ 
+ static struct op_mips_model *model;
+ 
+@@ -27,7 +30,7 @@ static int op_mips_setup(void)
+ 	model->reg_setup(ctr);
+ 
+ 	/* Configure the registers on all cpus.  */
+-	on_each_cpu(model->cpu_setup, NULL, 0, 1);
++	on_each_cpu(model->cpu_setup, 0, 0, 1);
+ 
+         return 0;
+ }
+@@ -38,7 +41,7 @@ static int op_mips_create_files(struct s
+ 
+ 	for (i = 0; i < model->num_counters; ++i) {
+ 		struct dentry *dir;
+-		char buf[4];
++		char buf[3];
+ 
+ 		snprintf(buf, sizeof buf, "%d", i);
+ 		dir = oprofilefs_mkdir(sb, root, buf);
+@@ -69,29 +72,33 @@ static void op_mips_stop(void)
+ 	on_each_cpu(model->cpu_stop, NULL, 0, 1);
+ }
+ 
+-int __init oprofile_arch_init(struct oprofile_operations *ops)
++static struct oprofile_operations oprof_mips_ops = {
++	.create_files	= op_mips_create_files,
++	.setup		= op_mips_setup,
++	.start		= op_mips_start,
++	.stop		= op_mips_stop,
++	.cpu_type	= NULL
++};
++
++int __init oprofile_arch_init(struct oprofile_operations **ops)
+ {
+ 	struct op_mips_model *lmodel = NULL;
+ 	int res;
+-
+ 	switch (current_cpu_data.cputype) {
+-	case CPU_5KC:
+-	case CPU_20KC:
+-	case CPU_24K:
+-	case CPU_25KF:
+-	case CPU_34K:
+-	case CPU_74K:
+-	case CPU_SB1:
+-	case CPU_SB1A:
+-	case CPU_R10000:
+-	case CPU_R12000:
+-	case CPU_R14000:
+-		lmodel = &op_model_mipsxx_ops;
+-		break;
+ 
+-	case CPU_RM9000:
+-		lmodel = &op_model_rm9000_ops;
++#ifdef CONFIG_MIPS_BRCM
++	case CPU_BCM6338:
++	case CPU_BCM6348:
++	case CPU_BCM6358:
++	case CPU_BCM6368:
++	case CPU_BCM6816:
++		lmodel = &op_model_bcm_optimer;
++        lmodel->cpu_type = "mips/bcm63xx";
+ 		break;
++#endif
++
++	default:
++		panic("oprofile enabled on undefined CPU\n");
+ 	};
+ 
+ 	if (!lmodel)
+@@ -103,12 +110,8 @@ int __init oprofile_arch_init(struct opr
+ 
+ 	model = lmodel;
+ 
+-	ops->create_files	= op_mips_create_files;
+-	ops->setup		= op_mips_setup;
+-	//ops->shutdown         = op_mips_shutdown;
+-	ops->start		= op_mips_start;
+-	ops->stop		= op_mips_stop;
+-	ops->cpu_type		= lmodel->cpu_type;
++	oprof_mips_ops.cpu_type = lmodel->cpu_type;
++	*ops = &oprof_mips_ops;
+ 
+ 	printk(KERN_INFO "oprofile: using %s performance monitoring.\n",
+ 	       lmodel->cpu_type);
+diff -pNur linux-2.6.21.7/arch/mips/oprofile/Kconfig linux-2.6.21.7/arch/mips/oprofile/Kconfig
+--- linux-2.6.21.7/arch/mips/oprofile/Kconfig	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/oprofile/Kconfig	2008-06-25 18:34:02.000000000 +0200
+@@ -7,11 +7,11 @@ config PROFILING
+ 	help
+ 	  Say Y here to enable the extended profiling support mechanisms used
+ 	  by profilers such as OProfile.
+-
++	  
+ 
+ config OPROFILE
+ 	tristate "OProfile system profiling (EXPERIMENTAL)"
+-	depends on PROFILING && !MIPS_MT_SMTC && EXPERIMENTAL
++	depends on PROFILING
+ 	help
+ 	  OProfile is a profiling system capable of profiling the
+ 	  whole system, include the kernel, kernel modules, libraries,
+diff -pNur linux-2.6.21.7/arch/mips/oprofile/Makefile linux-2.6.21.7/arch/mips/oprofile/Makefile
+--- linux-2.6.21.7/arch/mips/oprofile/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/oprofile/Makefile	2008-06-25 18:34:02.000000000 +0200
+@@ -10,8 +10,5 @@ DRIVER_OBJS = $(addprefix ../../../drive
+ 
+ oprofile-y				:= $(DRIVER_OBJS) common.o
+ 
+-oprofile-$(CONFIG_CPU_MIPS32)		+= op_model_mipsxx.o
+-oprofile-$(CONFIG_CPU_MIPS64)		+= op_model_mipsxx.o
+-oprofile-$(CONFIG_CPU_R10000)		+= op_model_mipsxx.o
+-oprofile-$(CONFIG_CPU_SB1)		+= op_model_mipsxx.o
+-oprofile-$(CONFIG_CPU_RM9000)		+= op_model_rm9000.o
++oprofile-$(CONFIG_MIPS_BRCM)		+= op_model_brcm_timer.o
++

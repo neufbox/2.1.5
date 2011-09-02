@@ -1,0 +1,114 @@
+diff -pruN yaddns-r39/Makefile yaddns-r39.mod/Makefile
+--- yaddns-r39/Makefile	2009-08-17 11:41:56.000000000 +0200
++++ yaddns-r39.mod/Makefile	2009-08-18 17:35:37.297709665 +0200
+@@ -5,7 +5,7 @@ INFO		:= http://gna.org/projects/yaddns
+ 
+ SERVICES	= dyndns
+ 
+-EXTRA_LIBS	= 
++EXTRA_LIBS	= -lnbd -lnbu
+ 
+ # global vars
+ CFLAGS		+= -DD_NAME="\"$(TGT)\"" -DD_VERSION="\"$(VERSION)\"" \
+diff -pruN yaddns-r39/src/ctl.c yaddns-r39.mod/src/ctl.c
+--- yaddns-r39/src/ctl.c	2009-08-17 11:41:56.000000000 +0200
++++ yaddns-r39.mod/src/ctl.c	2009-08-18 17:35:37.293568657 +0200
+@@ -16,6 +17,8 @@
+ #include "log.h"
+ #include "util.h"
+ 
++#include "nbd/status.h"
++
+ /* decs public variables */
+ struct list_head accountctl_list;
+ 
+@@ -67,6 +70,7 @@ static void ctl_process_recv(struct upda
+ {
+         int n, ret;
+         struct upreply_report report;
++	char buf_tv[16];
+ 
+         n = recv(updatepkt->s, 
+                  updatepkt->buf, sizeof(updatepkt->buf), 0);
+@@ -86,6 +90,8 @@ static void ctl_process_recv(struct upda
+                 log_error("Unknown error when reading response.");
+                 updatepkt->ctl->locked = 1;
+                 updatepkt->ctl->status = SError;
++                
++                nbd_status_set("ddns_status", "error_server");
+         }
+         else
+         {
+@@ -98,6 +104,10 @@ static void ctl_process_recv(struct upda
+                         updatepkt->ctl->updated = 1;
+                         updatepkt->ctl->last_update.tv_sec
+                                 = timeofday.tv_sec;
++                        
++                        nbd_status_set("ddns_status", "updated");
++			snprintf(buf_tv, sizeof buf_tv, "%ld", timeofday.tv_sec);
++                        nbd_status_set("ddns_lastupdate", buf_tv);
+                 }
+                 else
+                 {
+@@ -107,6 +117,9 @@ static void ctl_process_recv(struct upda
+                         
+                         updatepkt->ctl->status = SError;
+                         updatepkt->ctl->locked = report.rcmd_lock;
++                        
++                        nbd_status_set("ddns_status", report.custom_rc);
++                        
+                         if(report.rcmd_freeze)
+                         {
+                                 updatepkt->ctl->freezed = 1;
+@@ -532,6 +532,8 @@ void ctl_processfds(fd_set *readset, fd_
+                         if(updatepkt->state == EError)
+                         {
+                                 updatepkt->ctl->status = SError;
++                                
++                                nbd_status_set("ddns_status", "err_update");
+                         }
+ 
+                         list_del(&(updatepkt->list));
+diff -pruN yaddns-r39/src/yaddns.c yaddns-r39.mod/src/yaddns.c
+--- yaddns-r39/src/yaddns.c	2009-08-17 11:41:56.000000000 +0200
++++ yaddns-r39.mod/src/yaddns.c	2009-08-18 17:35:37.293568657 +0200
+@@ -10,6 +10,9 @@
+ #include "ctl.h"
+ #include "util.h"
+ 
++#include "nbd/core.h"
++#include "nbd/status.h"
++
+ volatile int quitting = 0;
+ volatile int reloadconf = 0;
+ volatile int wakeup = 0;
+@@ -71,6 +74,10 @@ int main(int argc, char **argv)
+         
+ 	/* open log */
+ 	log_open();
++        
++        /* open nbd socket */
++        nbd_open();
++        nbd_status_set("ddns_status", "starting");
+ 
+ 	/* sighandler */
+ 	memset(&sa, 0, sizeof(struct sigaction));
+@@ -128,6 +135,8 @@ int main(int argc, char **argv)
+                 goto exit_clean;
+         }
+         
++        nbd_status_set("ddns_status", "up");
++        
+ 	/* yaddns loop */
+ 	while(!quitting)
+ 	{
+@@ -252,6 +261,9 @@ int main(int argc, char **argv)
+         ctl_free();
+ 
+ exit_clean:
++        nbd_status_set("ddns_status", "down");
++        nbd_close();
++        
+ 	/* close log */
+ 	log_close();
+ 

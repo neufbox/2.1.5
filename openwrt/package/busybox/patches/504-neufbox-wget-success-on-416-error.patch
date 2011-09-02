@@ -1,0 +1,12 @@
+--- a/networking/wget.c	2009-04-29 15:25:06.719956275 +0200
++++ b/networking/wget.c	2009-04-29 10:20:05.793559613 +0200
+@@ -646,6 +646,9 @@ However, in real world it was observed t
+ 				if (beg_range)
+ 					break;
+ 				/* fall through */
++			case 416:
++				/* got this reply when we want to continue a finished download */
++				return EXIT_SUCCESS;
+ 			default:
+ 				/* Show first line only and kill any ESC tricks */
+ 				buf[strcspn(buf, "\n\r\x1b")] = '\0';

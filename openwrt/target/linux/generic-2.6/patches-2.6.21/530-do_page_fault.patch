@@ -1,0 +1,22 @@
+diff -pNur linux-2.6.21.7/arch/mips/mm/fault.c linux-2.6.21.7/arch/mips/mm/fault.c
+--- linux-2.6.21.7/arch/mips/mm/fault.c	2008-07-22 15:46:58.000000000 +0200
++++ linux-2.6.21.7/arch/mips/mm/fault.c	2008-07-22 16:38:53.000000000 +0200
+@@ -133,7 +133,7 @@ bad_area_nosemaphore:
+ 	if (user_mode(regs)) {
+ 		tsk->thread.cp0_badvaddr = address;
+ 		tsk->thread.error_code = write;
+-#if 0
++#if 1
+ 		printk("do_page_fault() #2: sending SIGSEGV to %s for "
+ 		       "invalid %s\n%0*lx (epc == %0*lx, ra == %0*lx)\n",
+ 		       tsk->comm,
+@@ -210,7 +210,7 @@ do_sigbus:
+ 	 * Send a sigbus, regardless of whether we were in kernel
+ 	 * or user mode.
+ 	 */
+-#if 0
++#if 1
+ 		printk("do_page_fault() #3: sending SIGBUS to %s for "
+ 		       "invalid %s\n%0*lx (epc == %0*lx, ra == %0*lx)\n",
+ 		       tsk->comm,
+

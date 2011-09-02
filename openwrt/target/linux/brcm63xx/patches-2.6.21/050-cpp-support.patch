@@ -1,0 +1,185 @@
+--- linux-2.6.21.7/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/Makefile	2008-06-12 10:15:41.000000000 +0200
+@@ -2279,6 +279,7 @@ include $(srctree)/scripts/Kbuild.includ
+ AS		= $(CROSS_COMPILE)as
+ LD		= $(CROSS_COMPILE)ld
+ CC		= $(CROSS_COMPILE)gcc
++CXX		= $(CROSS_COMPILE)g++
+ CPP		= $(CC) -E
+ AR		= $(CROSS_COMPILE)ar
+ NM		= $(CROSS_COMPILE)nm
+@@ -325,6 +326,7 @@ export HOSTCXX HOSTCXXFLAGS LDFLAGS_MODU
+ export CPPFLAGS NOSTDINC_FLAGS LINUXINCLUDE OBJCOPYFLAGS LDFLAGS
+ export CFLAGS CFLAGS_KERNEL CFLAGS_MODULE
++export CXX CXXFLAGS NOSTDINCXX_FLAGS
+ export AFLAGS AFLAGS_KERNEL AFLAGS_MODULE
+ 
+ # When compiling out-of-tree modules, put MODVERDIR in the module
+ # tree rather than in the kernel tree. The kernel tree might
+@@ -481,20 +483,25 @@ all: vmlinux
+ 
+ ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
+ CFLAGS		+= -Os
++CXXFLAGS	+= -Os
+ else
+ CFLAGS		+= -O2
++CXXFLAGS	+= -O2
+ endif
+ 
+ include $(srctree)/arch/$(ARCH)/Makefile
+ 
+ ifdef CONFIG_FRAME_POINTER
+ CFLAGS		+= -fno-omit-frame-pointer $(call cc-option,-fno-optimize-sibling-calls,)
++CXXFLAGS	+= -fno-omit-frame-pointer
+ else
+ CFLAGS		+= -fomit-frame-pointer
++CXXFLAGS	+= -fomit-frame-pointer
+ endif
+ 
+ ifdef CONFIG_DEBUG_INFO
+ CFLAGS		+= -g
++CXXFLAGS	+= -g
+ endif
+ 
+ # Force gcc to behave correct even for buggy distributions
+@@ -507,6 +514,12 @@ CFLAGS          += $(call cc-option, -fn
+ NOSTDINC_FLAGS += -nostdinc -isystem $(shell $(CC) -print-file-name=include)
+ CHECKFLAGS     += $(NOSTDINC_FLAGS)
+ 
++# arch Makefile may override CXX so keep this after arch Makefile is included
++NOSTDINCXX_FLAGS += $(NOSTDINC_FLAGS) -nostdinc
++CXXFLAGS	 += -fno-strict-aliasing -fno-common -G 0 -mno-abicalls -fno-pic \
++		    -fpermissive -w -fno-exceptions -fno-rtti -msoft-float -mabi=32 \
++                   -ffreestanding -pipe -march=mips32 -Wall -Wundef -Wno-trigraphs
++
+ # warn about C99 declaration after statement
+ CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
+ 
+diff -pNur linux-2.6.21.7/scripts/Makefile.build linux-2.6.21.7/scripts/Makefile.build
+--- linux-2.6.21.7/scripts/Makefile.build	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/scripts/Makefile.build	2008-06-12 01:14:36.000000000 +0200
+@@ -97,7 +97,7 @@ ifneq ($(KBUILD_CHECKSRC),0)
+ endif
+ 
+ 
+-# Compile C sources (.c)
++# Compile C or C++ sources (.c or .cc)
+ # ---------------------------------------------------------------------------
+ 
+ # Default is built-in, unless we know otherwise
+@@ -134,6 +134,9 @@ cmd_cc_s_c       = $(CC) $(c_flags) -fve
+ %.s: %.c FORCE
+ 	$(call if_changed_dep,cc_s_c)
+ 
++%.s: %.cc FORCE
++	$(call if_changed_dep,cxx_s_cc)
++
+ quiet_cmd_cc_i_c = CPP $(quiet_modtag) $@
+ cmd_cc_i_c       = $(CPP) $(c_flags)   -o $@ $<
+ 
+@@ -154,9 +157,11 @@ cmd_cc_symtypes_c	   = \
+ # (See cmd_cc_o_c + relevant part of rule_cc_o_c)
+ 
+ quiet_cmd_cc_o_c = CC $(quiet_modtag)  $@
++quiet_cmd_cxx_o_cc = CXX $(quiet_modtag) $@
+ 
+ ifndef CONFIG_MODVERSIONS
+ cmd_cc_o_c = $(CC) $(c_flags) -c -o $@ $<
++cmd_cxx_o_cc = $(CXX) $(cxx_flags) -c -o $@ $<
+ 
+ else
+ # When module versioning is enabled the following steps are executed:
+@@ -197,12 +202,30 @@ define rule_cc_o_c
+ 	mv -f $(dot-target).tmp $(dot-target).cmd
+ endef
+ 
++define rule_cxx_o_cc
++	$(if $($(quiet)cmd_checksrc),echo '  $($(quiet)cmd_checksrc)';)   \
++	$(cmd_checksrc)							  \
++	$(if $($(quiet)cmd_cxx_o_cc),echo '  $($(quiet)cmd_cxx_o_cc)';)	  \
++	$(cmd_cxx_o_cc);						  \
++	$(cmd_modversions)						  \
++	scripts/basic/fixdep $(depfile) $@ '$(cmd_cxx_o_cc)' > $(@D)/.$(@F).tmp;  \
++	rm -f $(depfile);						  \
++	mv -f $(@D)/.$(@F).tmp $(@D)/.$(@F).cmd
++endef
++
+ # Built-in and composite module parts
+ 
+ %.o: %.c FORCE
+ 	$(call cmd,force_checksrc)
+ 	$(call if_changed_rule,cc_o_c)
+ 
++%.o: %.cc FORCE
++	$(call if_changed_rule,cxx_o_cc)
++
++%.o: %.cpp FORCE
++	$(call if_changed_rule,cxx_o_cc)
++
++
+ # Single-part modules are special since we need to mark them in $(MODVERDIR)
+ 
+ $(single-used-m): %.o: %.c FORCE
+@@ -218,6 +241,24 @@ quiet_cmd_cc_lst_c = MKLST   $@
+ %.lst: %.c FORCE
+ 	$(call if_changed_dep,cc_lst_c)
+ 
++quiet_cmd_cxx_lst_cc = MKLST   $@
++      cmd_cxx_lst_cc = $(CXX) $(cxx_flags) -g -c -o $*.o $< && \
++		       $(CONFIG_SHELL) $(srctree)/scripts/makelst $*.o \
++				       System.map $(OBJDUMP) > $@
++
++%.lst: %.cc FORCE
++	$(call if_changed_dep,cxx_lst_cc)
++
++
++quiet_cmd_cxx_lst_cpp = MKLST   $@
++      cmd_cxx_lst_cpp = $(CXX) $(cxx_flags) -g -c -o $*.o $< && \
++		       $(CONFIG_SHELL) $(srctree)/scripts/makelst $*.o \
++				       System.map $(OBJDUMP) > $@
++
++%.lst: %.cpp FORCE
++	$(call if_changed_dep,cxx_lst_cpp)
++
++
+ # Compile assembler sources (.S)
+ # ---------------------------------------------------------------------------
+ 
+diff -pNur linux-2.6.21.7/scripts/Makefile.lib linux-2.6.21.7/scripts/Makefile.lib
+--- linux-2.6.21.7/scripts/Makefile.lib	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/scripts/Makefile.lib	2008-06-12 01:14:36.000000000 +0200
+@@ -87,6 +87,7 @@ modname_flags  = $(if $(filter 1,$(words
+                  -D"KBUILD_MODNAME=KBUILD_STR($(call name-fix,$(modname)))")
+ 
+ _c_flags       = $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$(basetarget).o)
++_cxx_flags     = $(CXXFLAGS) $(EXTRA_CXXFLAGS) $(CXXFLAGS_$(*F).o)
+ _a_flags       = $(AFLAGS) $(EXTRA_AFLAGS) $(AFLAGS_$(basetarget).o)
+ _cpp_flags     = $(CPPFLAGS) $(EXTRA_CPPFLAGS) $(CPPFLAGS_$(@F))
+ 
+@@ -95,6 +96,7 @@ _cpp_flags     = $(CPPFLAGS) $(EXTRA_CPP
+ 
+ ifeq ($(KBUILD_SRC),)
+ __c_flags	= $(_c_flags)
++__cxx_flags     = $(_cxx_flags)
+ __a_flags	= $(_a_flags)
+ __cpp_flags     = $(_cpp_flags)
+ else
+@@ -104,6 +106,7 @@ else
+ #   and locates generated .h files
+ # FIXME: Replace both with specific CFLAGS* statements in the makefiles
+ __c_flags	= $(call addtree,-I$(obj)) $(call flags,_c_flags)
++__cxx_flags     = $(call addtree,-I$(obj)) $(call flags,_cxx_flags)
+ __a_flags	=                          $(call flags,_a_flags)
+ __cpp_flags     =                          $(call flags,_cpp_flags)
+ endif
+@@ -112,6 +115,10 @@ c_flags        = -Wp,-MD,$(depfile) $(NO
+ 		 $(__c_flags) $(modkern_cflags) \
+ 		 -D"KBUILD_STR(s)=\#s" $(basename_flags) $(modname_flags)
+ 
++cxx_flags      = -Wp,-MD,$(depfile) $(NOSTDINCXX_FLAGS) $(CPPFLAGS) \
++                 $(__cxx_flags) $(modkern_cflags) \
++                 $(basename_flags) $(modname_flags)
++
+ a_flags        = -Wp,-MD,$(depfile) $(NOSTDINC_FLAGS) $(CPPFLAGS) \
+ 		 $(__a_flags) $(modkern_aflags)
+ 

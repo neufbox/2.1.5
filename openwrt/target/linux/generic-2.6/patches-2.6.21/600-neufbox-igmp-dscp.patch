@@ -1,0 +1,21 @@
+diff --exclude=.svn -pNur linux-2.6.21.7/net/ipv4/igmp.c linux-2.6.21.7/net/ipv4/igmp.c
+--- linux-2.6.21.7/net/ipv4/igmp.c	2008-12-23 10:25:18.365223901 +0100
++++ linux-2.6.21.7/net/ipv4/igmp.c	2008-12-23 10:26:13.149364495 +0100
+@@ -318,7 +318,7 @@ static struct sk_buff *igmpv3_newpack(st
+ 
+ 	pip->version  = 4;
+ 	pip->ihl      = (sizeof(struct iphdr)+4)>>2;
+-	pip->tos      = 0xc0;
++	pip->tos      = (0x24<<2);
+ 	pip->frag_off = htons(IP_DF);
+ 	pip->ttl      = 1;
+ 	pip->daddr    = rt->rt_dst;
+@@ -668,7 +668,7 @@ static int igmp_send_report(struct in_de
+ 
+ 	iph->version  = 4;
+ 	iph->ihl      = (sizeof(struct iphdr)+4)>>2;
+-	iph->tos      = 0xc0;
++	iph->tos      = (0x24<<2);
+ 	iph->frag_off = htons(IP_DF);
+ 	iph->ttl      = 1;
+ 	iph->daddr    = dst;

@@ -1,0 +1,116 @@
+#!/bin/sh
+
+#echo " Route Script"
+#echo "---  route $1 ---"
+
+# Tables
+PPPT=ppp_t
+LANT=lan_t
+NEUFT=neuf_t
+
+IPLOCAL=$2
+IPREMOTE=$3
+IFNAME=$4
+DNS1=$5
+DNS2=$6
+
+LAN_IP=`nvram get lan_ipaddr`
+LAN_NETMASK=`nvram get lan_netmask`
+LAN_NET=`net $LAN_IP $LAN_NETMASK`
+LAN_IF=`nvram get lan_ifname`
+DATA_IF=`status get net_data_ifname`
+VOIP_IF=`nvram get net_adsl_voip_ifname`
+
+logger -s -t route -p daemon.info "== $0 $* =="
+
+#echo " IPLOCAL  $IPLOCAL"
+#echo " IPREMOTE $IPREMOTE"
+#echo " IFNAME   $IFNAME"
+#echo " DNS1     $DNS1"
+#echo " DNS2     $DNS2"
+#echo " LAN_NET  $LAN_NET"
+#echo " LAN_IF   $LAN_IF"
+#echo "--"
+
+
+
+case "$1" in
+	ppp-up)
+		# Make n9ubox ext_ip alive from the lan
+		ip rule add priority 32765 from $LAN_NET table $LANT
+		ip route add $LAN_NET dev $LAN_IF table $LANT
+
+		# Make it possible to talk to STB IP Alias if still active somehow
+		if [ "`status get net_infra`" = "adsl" ]
+		then
+			ip route add 172.16.255.252/30 dev $LAN_IF table $LANT
+		else
+			ip route add 172.16.255.252/30 dev $DATA_IF table $LANT
+		fi
+		ip route add default via $IPREMOTE table $LANT
+
+		# Make n9ufbox ext_ip alive from the net
+		ip rule add priority 32764 from $IPLOCAL table $PPPT
+		ip route add $LAN_NET dev $LAN_IF table $PPPT
+		ip route add default via $IPREMOTE table $PPPT
+
+		# Make it possible to reach public DNS servers via PPP
+		# they are self erased when ppp goes down
+		[ -n "$DNS1" ] && ip route add $DNS1 via $IPREMOTE
+		[ -n "$DNS2" ] && ip route add $DNS2 via $IPREMOTE
+
+		# Check if voip is up
+		ROUTE_LST=`route -n | grep "^0.0.0.0.*$DATA_IF"`
+		if [ -z "$ROUTE_LST" ] ; then
+			# Option 3
+			ip route add default via $IPREMOTE
+		fi
+
+		ip route flush cache
+
+
+		#####################
+		# Doing NAT, internet sharing, removing redirect
+		iptables -D FORWARD -o $VOIP_IF -j DROP
+		# Remove port 80 DNAT to web ui when PPP down
+		#iptables -t nat -D PREROUTING -i $LAN_IF -p tcp --dport 80 -j DNAT --to $LAN_IP:80
+		iptables -t nat -A POSTROUTING -o $IFNAME -s $LAN_NET -j SNAT --to $IPLOCAL
+		;;
+
+	ppp-down)
+		iptables -t nat -D POSTROUTING -o $IFNAME -s $LAN_NET -j SNAT --to $IPLOCAL
+		iptables -A FORWARD -o $VOIP_IF -j DROP
+
+		# Deleting route from $LANT
+		ip rule del from $LAN_NET table $LANT
+		ip route del $LAN_NET dev $LAN_IF table $LANT
+		ip route del default via $IPREMOTE table $LANT
+
+		# Deleting route from $PPPT
+		ip rule del from $IPLOCAL table $PPPT
+		ip route del $LAN_NET dev $LAN_IF table $PPPT
+		ip route del default via $IPREMOTE table $PPPT
+
+
+		OPTION=`autoconf get option`
+		if [ "$OPTION" = "3" ] || [ "$OPTION" = "5" ]
+		then
+			ip route del default via $IPREMOTE
+		fi
+
+		ip route flush cache
+	;;
+
+	dhcptv-ack)
+		ip route replace default via $IPREMOTE table stb_t
+		ip rule add priority 2000 from $IPLOCAL table stb_t
+		ip route flush cache
+	;;
+
+	dhcp-ack)
+		ip route replace default via $IPREMOTE
+		ip route flush cache
+	;;
+
+esac
+

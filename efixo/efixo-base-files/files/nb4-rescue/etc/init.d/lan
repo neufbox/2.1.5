@@ -1,0 +1,71 @@
+#!/bin/sh /etc/rc.common
+
+KERNELVER=`uname -r`
+
+setup_infra_adsl( ) {
+	brctl addbr lan0
+
+	ifconfig eth0 hw ether `getmac 15` 
+	brctl addif lan0 eth0
+
+	ifconfig eth1 hw ether `getmac 10`
+	brctl addif lan0 eth1
+
+	ifconfig eth0 up
+	ifconfig eth1 up
+
+	ifconfig lan0 192.168.1.1 up
+}
+
+
+
+setup_infra_ftth( ) {
+	insmod /lib/modules/$KERNELVER/vnet.ko
+
+	brctl addbr lan0
+
+	ifconfig eth0 hw ether `getmac 15` up
+	brctl addif lan0 eth0
+
+	ifconfig eth1 up
+
+	ifconfig eth1.2 hw ether `getmac 10` up
+	brctl addif lan0 eth1.2
+
+	ifconfig lan0 192.168.1.1 up
+}
+
+
+
+setup_infra_mediafibre( ) {
+	echo "MEDIAFIBRE LAN : not implemented"
+	return -1
+}
+
+
+
+boot( ) {
+
+	NET_INFRA=`getinfra`
+	echo "====================="
+	echo "  NET INFRA : $NET_INFRA"
+	echo "====================="
+
+
+        case "$NET_INFRA" in
+
+                adsl)
+			setup_infra_adsl
+			;;
+
+		ftth)
+			setup_infra_ftth
+			;;
+
+		mediafibre)
+			setup_infra_mediafibre
+			;;
+
+	esac
+	
+}

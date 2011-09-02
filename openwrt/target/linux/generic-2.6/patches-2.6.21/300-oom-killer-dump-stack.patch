@@ -1,0 +1,65 @@
+--- linux-2.6.21.7/mm/oom_kill.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/mm/oom_kill.c	2008-11-15 19:12:27.000000000 +0100
+@@ -267,6 +267,42 @@ static struct task_struct *select_bad_pr
+ }
+ 
+ /**
++ * dump_tasks - dump current memory state of all system tasks
++ * @mem: target memory controller
++ *
++ * Dumps the current memory state of all system tasks, excluding kernel threads.
++ * State information includes task's pid, uid, tgid, vm size, rss, cpu, oom_adj
++ * score, and name.
++ *
++ * If the actual is non-NULL, only tasks that are a member of the mem_cgroup are
++ * shown.
++ *
++ * Call with tasklist_lock read-locked.
++ */
++static void dump_tasks(void)
++{
++	struct task_struct *g, *p;
++
++	printk(KERN_INFO "[ pid ]   uid  tgid total_vm      rss cpu oom_adj "
++	       "name\n");
++	do_each_thread(g, p) {
++		/*
++		 * total_vm and rss sizes do not exist for tasks with a
++		 * detached mm so there's no need to report them.
++		 */
++		if (!p->mm)
++			continue;
++
++		task_lock(p);
++		printk(KERN_INFO "[%5d] %5d %5d %8lu %8lu %3d     %3d %s\n",
++		       p->pid, p->uid, p->tgid, p->mm->total_vm,
++		       get_mm_rss(p->mm), (int)task_cpu(p), p->oomkilladj,
++		       p->comm);
++		task_unlock(p);
++	} while_each_thread(g, p);
++}
++
++/**
+  * Send SIGKILL to the selected  process irrespective of  CAP_SYS_RAW_IO
+  * flag though it's unlikely that  we select a process with CAP_SYS_RAW_IO
+  * set.
+@@ -404,14 +442,18 @@ void out_of_memory(struct zonelist *zone
+ 		/* Got some memory back in the last second. */
+ 		return;
+ 
+-	if (printk_ratelimit()) {
++	if (1) {
+ 		printk(KERN_WARNING "%s invoked oom-killer: "
+ 			"gfp_mask=0x%x, order=%d, oomkilladj=%d\n",
+ 			current->comm, gfp_mask, order, current->oomkilladj);
+ 		dump_stack();
+ 		show_mem();
++		dump_tasks();
+ 	}
+ 
++	if (sysctl_panic_on_oom == 2)
++		panic("out of memory. Compulsory panic_on_oom is selected.\n");
++
+ 	/*
+ 	 * Check if there were limitations on the allocation (only relevant for
+ 	 * NUMA) that may require different handling.

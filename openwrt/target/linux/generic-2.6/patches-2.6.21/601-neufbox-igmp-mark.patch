@@ -1,0 +1,12 @@
+--- linux-2.6.21.7/net/ipv4/igmp.c	2009-01-28 15:08:44.031764008 +0100
++++ linux-2.6.21.7/net/ipv4/igmp.c	2009-01-28 15:09:40.830612192 +0100
+@@ -662,6 +662,9 @@ static int igmp_send_report(struct in_de
+ 
+ 	skb->dst = &rt->u.dst;
+ 
++	/* neufox: mark skb for high QoS */
++	skb->mark = 3;
++
+ 	skb_reserve(skb, LL_RESERVED_SPACE(dev));
+ 
+ 	skb->nh.iph = iph = (struct iphdr *)skb_put(skb, sizeof(struct iphdr)+4);

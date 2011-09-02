@@ -1,0 +1,199 @@
+--- veth-1.0/veth/vethd.c	2003-10-21 18:15:15.000000000 +0200
++++ veth-1.0/veth/vethd.c	2009-02-25 15:34:34.766145837 +0100
+@@ -24,11 +24,13 @@
+ #include <netinet/in.h>
+ #include <sys/ioctl.h>
+ #include <sys/socket.h>
++#include <sys/mman.h>
+ #include <unistd.h>
+ #include <linux/if.h>
+ #include <linux/if_ether.h>
+ #include <linux/if_packet.h>
+ #include <linux/if_tun.h>
++#include <net/ethernet.h> 
+ 
+ #define max(a,b) ((a)>(b) ? (a):(b))
+ 
+@@ -53,6 +55,9 @@
+ typedef int eth_handler;
+ typedef unsigned char hw_addr[6];
+ 
++struct iovec *ring;
++size_t ring_size;
++
+ void set_locale(void)
+ {
+ 	setlocale(LC_ALL, (const char *)getenv("LC_ALL"));
+@@ -175,8 +180,12 @@ eth_handler open_eth_device(const char *
+ {
+ 	struct ifreq ifr;
+ 	eth_handler sock_fd;
+-	int if_index;
+ 	struct sockaddr_ll sll;
++	struct tpacket_req req;
++	int frames_per_block;
++	int if_index;
++	void *p;
++	int idx, i, k;
+ 
+ 	sock_fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+ 
+@@ -211,18 +220,105 @@ eth_handler open_eth_device(const char *
+ 		perror("Error while bind'ing eth0");
+ 		return ERR_BIND;
+ 	}
++
++	req.tp_block_size = getpagesize();
++	req.tp_frame_size = TPACKET_ALIGN(1518 + TPACKET_HDRLEN);
++	req.tp_block_nr = 32;
++	frames_per_block = req.tp_block_size / req.tp_frame_size;
++	req.tp_frame_nr = frames_per_block * req.tp_block_nr;
++	if(setsockopt(sock_fd, SOL_PACKET, PACKET_RX_RING, (void *)&req, sizeof(req))<0)
++	{
++		perror("Error while setsockopt eth0");
++		return ERR_BIND;
++	}
++
++	p = mmap(0, req.tp_block_nr * req.tp_block_size, PROT_READ | PROT_WRITE,
++		 MAP_SHARED, sock_fd, 0);
++	if (p == MAP_FAILED)
++	{
++		perror("mmap");
++		exit(EXIT_FAILURE);
++	}
++
++	ring_size = req.tp_frame_nr;
++	ring = (struct iovec *) malloc(req.tp_frame_nr * sizeof(struct iovec));
++	idx=0;
++	for (i=0; i<req.tp_block_nr; i++) {
++		for (k=0; k<frames_per_block; k++) {
++			ring[idx].iov_base = p + req.tp_block_size*i + k*req.tp_frame_size;
++			ring[idx].iov_len = req.tp_frame_size;
++			*(unsigned long*)ring[idx].iov_base = 0;
++			idx++;
++		}
++	}
++
+ 	return sock_fd;
+ }
+ 
++static inline int ppp_ethernet_trame(struct ether_header const *e) 
++{ 
++	return (e->ether_type == htons(ETH_P_PPP_SES)) || (e->ether_type == htons(ETH_P_PPP_DISC)); 
++} 
++
++void run(int vfd, int nfd)
++{
++	fd_set fds;
++	int leidos;
++
++	FD_ZERO(&fds);
++	FD_SET(nfd, &fds);
++	FD_SET(vfd, &fds);
++
++	if(select(max(vfd, nfd) + 1, &fds, NULL, NULL, NULL) < 0) {
++		perror("Error in select()");
++		exit(4);
++	}
++	if(FD_ISSET(vfd, &fds)) {
++		char buffer[1600];
++
++		leidos = read(vfd, buffer, sizeof(buffer));
++		if(leidos == -1) {
++			perror("Error reading from TAP");
++			exit(2);
++		}
++		write(nfd, buffer, leidos);
++	}
++	if(FD_ISSET(nfd, &fds)) {
++		int i;
++
++		for(i=0; i <ring_size;++i) {
++			struct tpacket_hdr *h = ring[i].iov_base;
++			struct sockaddr_ll *sll;
++
++			/* no packet available */
++			if (!h->tp_status) { 
++				continue;
++			}
++
++			sll = (void*)h + TPACKET_ALIGN(sizeof(*h));
++			if ((sll->sll_pkttype != PACKET_MULTICAST)
++			 && (sll->sll_pkttype != PACKET_OUTGOING)) {
++				unsigned char *bp = (unsigned char*)h + h->tp_mac;
++				struct ether_header const *e = (const void *)bp;
++
++				if (!ppp_ethernet_trame(e)) { /* drop ppp */
++					write(vfd, bp, h->tp_len);
++				}
++			}
++
++			/* consume packet */
++			h->tp_status = 0;
++		}
++	}
++}
++
+ int main(int argc, char **argv)
+ {
+-	char buffer[1600],
+-		veth_device[MAX_ETH_STR + 1] = VETH0_DEVICE,
+-		eth_device[MAX_ETH_STR + 1] = ETH_DEVICE,
+-		mac_addr_str[MAX_MAC_STR + 1] = "";
++	char veth_device[MAX_ETH_STR + 1] = VETH0_DEVICE;
++	char eth_device[MAX_ETH_STR + 1] = ETH_DEVICE;
++	char mac_addr_str[MAX_MAC_STR + 1] = "";
+ 
+-	int vfd, nfd, leidos, opc, foreground = 0;
+-	fd_set fds;
++	int vfd, nfd, opc, foreground = 0;
+ 
+ 	set_locale();
+ 	show_copyright();
+@@ -325,43 +421,9 @@ int main(int argc, char **argv)
+ 				return 0;
+ 			}
+ 	}
+-
+-
+-	FD_ZERO(&fds);
+-	FD_SET(nfd, &fds);
+-	FD_SET(vfd, &fds);
+-
+-	while(1)
+-	{
+-		if(select(max(vfd, nfd) + 1, &fds, NULL, NULL, NULL) < 0)
+-		{
+-			perror("Error in select()");
+-			return 4;
+-		}
+-		if(FD_ISSET(vfd, &fds))
+-		{
+-			leidos = read(vfd, buffer, sizeof(buffer));
+-			if(leidos == -1)
+-			{
+-				perror("Error reading from TAP");
+-				return 2;
+-			}
+-			write(nfd, buffer, leidos);
+-		}
+-		if(FD_ISSET(nfd, &fds))
+-		{
+-			leidos = read(nfd, buffer, sizeof(buffer));
+-			if(leidos == -1)
+-			{
+-				perror("Error reading from ethernet interface");
+-				return 2;
+-			}
+-			write(vfd, buffer, leidos);
+-		}
+-		FD_ZERO(&fds);
+-		FD_SET(nfd, &fds);
+-		FD_SET(vfd, &fds);
+-	}
++	
++	for (;;)
++		run(vfd, nfd);
+ 
+ 	return 0;
+ }

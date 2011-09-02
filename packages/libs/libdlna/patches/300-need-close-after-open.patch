@@ -1,0 +1,34 @@
+diff -pruN libdlna-0.2.3.orig/src/profiles.c libdlna-0.2.3/src/profiles.c
+--- libdlna-0.2.3.orig/src/profiles.c	2008-12-15 15:21:35.523841079 +0100
++++ libdlna-0.2.3/src/profiles.c	2008-12-15 15:24:34.300100198 +0100
+@@ -292,7 +292,7 @@ dlna_guess_media_profile (dlna_t *dlna, 
+   {
+     if (dlna->verbosity)
+       fprintf (stderr, "can't find stream info\n");
+-    return NULL;
++    goto cleanup;
+   }
+ 
+ #ifdef HAVE_DEBUG
+@@ -302,7 +302,7 @@ dlna_guess_media_profile (dlna_t *dlna, 
+   /* grab codecs info */
+   codecs = av_profile_get_codecs (ctx);
+   if (!codecs)
+-    return NULL;
++    goto cleanup;
+ 
+   /* check for container type */
+   st = stream_get_container (ctx);
+@@ -335,8 +335,11 @@ dlna_guess_media_profile (dlna_t *dlna, 
+     p = p->next;
+   }
+ 
+-  av_close_input_file (ctx);
+   free (codecs);
++
++cleanup:
++  av_close_input_file (ctx);
++  
+   return profile;
+ }
+ 

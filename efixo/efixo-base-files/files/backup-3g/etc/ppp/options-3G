@@ -1,0 +1,18 @@
+child-timeout 20
+/var/backup3g/ttyDATA		# First serial port device
+38400						# Serial port speed. Feel free to experiment here
+
+connect /etc/ppp/gprs-connect-chat		# Connect script
+
+:10.0.0.2					# Accept IP assigned by provider
+noipdefault
+ipcp-accept-local
+
+local						# Ignore carrier detect signal
+
+novj						# Turn off header compression,
+novjccomp					# essential in some GPRS networks
+
+disconnect /etc/ppp/gprs-disconnect-chat	# Disconnect script
+defaultroute
+usepeerdns

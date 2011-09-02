@@ -1,0 +1,13 @@
+diff --exclude=.svn -pNur linux-2.6.21.7/include/asm-mips/mach-bcm63xx/bcmTag.h linux-2.6.21.7/include/asm-mips/mach-bcm63xx/bcmTag.h
+--- linux-2.6.21.7/include/asm-mips/mach-bcm63xx/bcmTag.h	2009-01-19 13:21:47.138698181 +0100
++++ linux-2.6.21.7/include/asm-mips/mach-bcm63xx/bcmTag.h	2009-01-19 13:22:20.658220442 +0100
+@@ -67,7 +67,8 @@ typedef struct _FILE_TAG
+     char kernelAddress[ADDRESS_LEN];    // if non zero, kernel starting address
+     char kernelLen[IMAGE_LEN];          // if non zero, kernel size in clear ASCII text.
+     char imageSequence[FLAG_LEN * 2];   // incrments everytime an image is flashed
+-    char reserved[RESERVED_LEN];        // reserved for later use
++    char version[RESERVED_LEN - 1];     // reserved for later use
++    char net_infra [1];                 // net infra
+     char imageValidationToken[TOKEN_LEN];// image validation token - can be crc, md5, sha;  for
+                                                  // now will be 4 unsigned char crc
+     char tagValidationToken[TOKEN_LEN]; // validation token for tag(from signiture_1 to end of // mageValidationToken)

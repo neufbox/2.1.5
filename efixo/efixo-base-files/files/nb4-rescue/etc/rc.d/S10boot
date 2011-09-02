@@ -1,0 +1,45 @@
+#!/bin/sh /etc/rc.common
+
+START=10
+
+system_config() {
+	hostname -F /etc/hostname
+
+	ifconfig lo 127.0.0.1
+}
+
+print_banner() {
+	[ -f /etc/banner ] && cat /etc/banner
+	echo "Kernel Version : `uname -r`"
+}
+
+mount_all() {
+	mount -a
+}
+
+load_modules() {
+	[ -d /etc/modules.d ] && {
+		cd /etc/modules.d
+		sed 's/^[^#]/insmod &/' $* | ash 2>&- || :
+	}
+}
+
+start() {
+	system_config
+
+	print_banner
+
+	mount_all
+
+	mkdir -p /var/run
+	mkdir -p /var/log
+	mkdir -p /var/lock
+	mkdir -p /var/state
+	mkdir -p /var/mnt
+	mkdir -p /var/adsl
+	mkdir -p /var/ppp
+	mkdir -p /var/tmp
+	chmod a+rwx /tmp /var/tmp
+
+	load_modules /etc/modules.d/*
+}

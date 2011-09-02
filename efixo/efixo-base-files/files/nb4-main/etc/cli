@@ -1,0 +1,244 @@
+#!/bin/sh
+
+while [ true ]
+do
+	ppp_active=`nvram get ppp_active`
+	voip_stackstatus=`status get voip_stackstatus`
+	tv_status=`staus get tv_status`
+	echo "Bienvenue sur le système N9ufBOX"
+	echo ""
+	echo ""
+	echo "
+
+	. . . . . . Etat des services
+	Disponibilité Internet : $ppp_active 
+	Disponibilité téléphone : $voip_stackstatus        
+	Disponibilité télévision : $tv_status
+	"
+
+
+	echo " :1: Etat - :2: Réseaux - :3: WiFi - :4: Sécurité - :5: Applications - :6: Sauvegarde - :7: Sortir"
+	read value
+	
+	case "$value" in 
+	1)
+		clear
+		echo " :1: Etat"
+		echo ""
+		echo ""
+		echo -n "  Addresse mac "
+		nbctl mac
+		echo ""
+		echo "  Modele NeufBOX `status get productID`"
+		echo "  Version du Firmware `status get version_mainfirmware`"
+		echo "  Uptime `uptime`"
+		echo "  Etat des leds"
+		ledctl list | cut -d '_' -f 2
+		echo ""
+		echo ""
+		echo ""
+	;;
+	2)
+		clear
+		echo " :2: Réseaux"
+		ddns_active=`nvram get ddns_active`
+
+		while [ true ] 
+		do
+			echo ""
+			echo ""
+			echo "  1: Bridge Routeur : $net_mode"
+			echo ""
+			echo "  2: DynDNS : $ddns_active"
+			echo ""
+			echo "  3: DnsRelay"
+			echo ""
+			read menu
+
+			case "$menu" in
+			
+			1)
+				
+				
+				echo "  1: Bridge Routeur : $net_mode"
+				echo "    a) bridge b) router"
+				read mode
+				case "$mode" in
+					a)
+						nvram set net_mode 'bridge'
+
+					;;
+
+					b)
+						nvram set net_mode 'router'
+					;;
+
+					*)
+						echo " Erreur de saisie"
+						break
+					;;
+
+				esac
+			;;
+			2)
+				echo "  2: DynDNS : $ddns_active"
+				echo "    a) on/off b) hostname c) username d) password "
+				read ddns
+				case "$ddns" in
+
+					a)
+						echo "a) : "
+						read value
+						nvram set ddns_active '$value'
+					;;
+
+					b)
+						echo "b) : "
+						read value
+						nvram set ddns_hostname '$value'
+					;;
+
+					c)
+						echo "c) : "
+						read value
+						nvram set ddns_username '$value'
+
+					;;
+
+					d)
+						echo "d) : "
+						read value
+						nvram set ddns_password '$value'
+
+					;;
+
+
+					*)
+						echo " Erreur de saisie"
+						break
+					;;
+
+				esac
+
+			;;
+			3)
+				relay=`nvram get relay`
+				echo "  3: DnsRelay"
+				echo "   Server  : $relay_server"
+				echo "   Domaine :  $relay_domain"
+				echo "   a) Serveur b) Domaine"
+				read relay
+				case "$relay" in
+					a)	
+						echo "    Serveur : "
+						read value
+						nvram set relay_server '$value'
+					;;
+					b)
+						echo "    Domaine : "
+						read value
+						nvram set relay_domain '$value'
+						
+					;;
+					*)
+						echo "Erreur de saisie"
+						break
+					;;
+				esac
+				;;
+
+
+			*)
+				echo "Erreur de saisie"
+				break
+			;;
+
+			esac
+		done
+
+		echo ""
+		echo ""
+		echo ""
+			
+
+	;;
+	3)
+		clear
+		echo " :3: WiFi"
+		wlan_wl0_ssid=`nvram get wlan_wl0_ssid`
+		wlan_wl0_enc=`nvram get wlan_wl0_enc`
+		wlan_active=`nvram get wlan_active`
+
+
+		echo "  Borne WiFi : $wlan_active"
+		echo "  SSID       : $wlan_wl0_ssid"
+		echo "  Cryptage   : $wlan_wl0_enc"
+		echo ""
+		echo ""
+		echo " ... les autres fonctionnalitées sont disponible sur l'interface web"
+
+	;;
+	4)
+		clear
+
+		wlan_wl0_enc=`nvram get wlan_wl0_enc`
+		wlan_macmode=`nvram get wlan_macmode`
+
+		if [ "$wlan_macmode" = "0" ] 
+		then 
+			wlan_macmode="Désactivé"
+		else
+			wlan_macmode="Activé"	
+		fi
+
+		echo " :4: Sécurité"
+
+		echo "   Firewall  	   : Activé"
+		echo "   Contrôle d'accès  : Désactivé"
+		echo "   Cryptage Wifi 	   : $wlan_wl0_enc"
+		echo "   Filtrage MAC Wifi : $wlan_macmode"
+		echo ""
+		echo ""
+		echo ""
+	;;
+	5)
+		clear
+		echo " :5: Applications"
+		echo "   .... Fonctionnalitées a venir"
+		echo ""
+		echo ""
+		echo ""
+	;;
+	6)
+		clear
+		echo " :6: Sauvegarde"
+		echo "   Confirmation o/n"
+
+		read commit
+
+		case "$commit" in
+
+		o)
+			nvram commit user > /dev/null
+			echo "Configuration Sauvegardé" 
+		;;
+		n)
+			echo "Sauvegarde Annulée"
+		;;
+
+		*)
+			echo " Erreur de saisie"
+		;;
+		esac
+		echo ""
+		echo ""
+		echo ""
+	;;
+	7)
+		exit 0
+	;;
+	*)
+		echo "Erreur Merci de verifier votre saisie"
+	;;
+	esac
+done

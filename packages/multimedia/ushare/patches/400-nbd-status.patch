@@ -1,0 +1,263 @@
+diff -pruN ./ushare-1.1a.orig/configure ushare-1.1a/configure
+--- ./ushare-1.1a.orig/configure	2009-02-20 18:30:19.733834394 +0100
++++ ushare-1.1a/configure	2009-02-20 18:30:57.455827724 +0100
+@@ -746,7 +746,7 @@ else
+   append_config "STRIP=echo ignoring strip"
+   append_config "INSTALLSTRIP="
+ fi
+-append_config "EXTRALIBS=$extralibs"
++append_config "EXTRALIBS=$extralibs -lnbu -lnbd"
+ 
+ append_config "OPTFLAGS=$CFLAGS"
+ append_config "LDFLAGS=$LDFLAGS"
+diff -pruN ./ushare-1.1a.orig/src/metadata.c ushare-1.1a/src/metadata.c
+--- ./ushare-1.1a.orig/src/metadata.c	2009-02-20 18:30:19.733834394 +0100
++++ ushare-1.1a/src/metadata.c	2009-02-20 18:32:55.919866963 +0100
+@@ -40,6 +40,9 @@
+ #ifdef HAVE_FAM
+ #include "ufam.h"
+ #endif /* HAVE_FAM */
++ 
++#include <nbd/core.h>
++#include <nbd/status.h>
+ 
+ #define TITLE_UNKNOWN "unknown"
+ 
+@@ -459,6 +462,7 @@ static void
+ metadata_add_file (struct ushare_t *ut, struct upnp_entry_t *entry,
+                    const char *file, const char *name, struct stat *st_ptr)
+ {
++  char buf[8];
+   if (!entry || !file || !name)
+     return;
+ 
+@@ -472,7 +476,11 @@ metadata_add_file (struct ushare_t *ut, 
+ 
+     child = upnp_entry_new (ut, name, file, entry, st_ptr->st_size, false);
+     if (child)
++    {
+       upnp_entry_add_child (ut, entry, child);
++      snprintf(buf, sizeof(buf), "%d", ++ut->nr_entries_file);
++      nbd_status_set("ushare_sharedcount", buf);
++    }
+   }
+ }
+ 
+@@ -546,6 +554,7 @@ free_metadata_list (struct ushare_t *ut)
+     upnp_entry_free (ut, ut->root_entry);
+   ut->root_entry = NULL;
+   ut->nr_entries = 0;
++  ut->nr_entries_file = 0;
+ 
+   if (ut->rb)
+   {
+diff -pruN ./ushare-1.1a.orig/src/ushare.c ushare-1.1a/src/ushare.c
+--- ./ushare-1.1a.orig/src/ushare.c	2009-02-20 18:30:19.733834394 +0100
++++ ushare-1.1a/src/ushare.c	2009-02-20 18:55:19.198277688 +0100
+@@ -76,6 +76,9 @@
+ #include "ufam.h"
+ #endif /* HAVE_FAM */
+ 
++#include <nbd/core.h>
++#include <nbd/status.h>
++
+ struct ushare_t *ut = NULL;
+ 
+ static struct ushare_t * ushare_new (void)
+@@ -95,6 +98,7 @@ ushare_new (void)
+   ut->rb = rbinit (rb_compare, NULL);
+   ut->root_entry = NULL;
+   ut->nr_entries = 0;
++  ut->nr_entries_file = 0;
+   ut->starting_id = STARTING_ENTRY_ID_DEFAULT;
+   ut->init = 0;
+   ut->dev = 0;
+@@ -177,6 +181,8 @@ ushare_free (struct ushare_t *ut)
+ static void
+ ushare_signal_exit (void)
+ {
++  nbd_status_set("ushare_status", "stopping");
++  
+   pthread_mutex_lock (&ut->termination_mutex);
+   pthread_cond_signal (&ut->termination_cond);
+   pthread_mutex_unlock (&ut->termination_mutex);
+@@ -730,6 +736,7 @@ reload_config (int s __attribute__ ((unu
+   else
+   {
+     log_error (_("Error: no content directory to be shared.\n"));
++    nbd_status_set("ushare_errno", "noshare");
+     raise (SIGINT);
+   }
+ }
+@@ -811,6 +818,8 @@ int ushare_daemon(int nochdir, int noclo
+ int
+ main (int argc, char **argv)
+ {
++  int ret = EXIT_SUCCESS;
++
+   ut = ushare_new ();
+   if (!ut)
+     return EXIT_FAILURE;
+@@ -849,54 +858,65 @@ main (int argc, char **argv)
+   {
+     /* starting syslog feature as soon as possible */
+     start_log ();
++
++    int err;
++ 
++    /* uClibc daemon() has problems with pthread and friends */
++    /* workaround from http://www.mail-archive.com/uclibc@uclibc.org/msg01073.html */
++    /* res = daemon(0, 0); */
++    err = ushare_daemon (0, 0);
++    if (err == -1)
++    {
++      log_error (_("Error: failed to daemonize program : %s\n"),
++                 strerror (err));
++      ushare_free (ut);
++      return EXIT_FAILURE;
++    }
++  }
++  else
++  {
++    display_headers ();
+   }
+ 
++  /* open nbd socket :) */
++  if(nbd_open() == -1)
++  {
++    log_error(_("Error: failed to open nbd socket\n"));
++    ushare_free(ut);
++    return EXIT_FAILURE;
++  }
++  
++  /* update nbd status */
++  nbd_status_set("ushare_status", "starting");
++  nbd_status_set("ushare_sharedcount", "0");
++  nbd_status_set("ushare_errno", "");
++  
+   if (!ut->contentlist)
+   {
+     log_error (_("Error: no content directory to be shared.\n"));
+-    ushare_free (ut);
+-    return EXIT_FAILURE;
++    nbd_status_set("ushare_errno", "noshare");
++    ret = EXIT_FAILURE;
++    goto clean_after_nbd_open;
+   }
+ 
+   if (!has_iface (ut->interface))
+   {
+-    ushare_free (ut);
+-    return EXIT_FAILURE;
++    ret = EXIT_FAILURE;
++    goto clean_after_nbd_open;
+   }
+ 
+   ut->udn = create_udn (ut->interface);
+   if (!ut->udn)
+   {
+-    ushare_free (ut);
+-    return EXIT_FAILURE;
++    ret = EXIT_FAILURE;
++    goto clean_after_nbd_open;
+   }
+ 
+   ut->ip = get_iface_address (ut->interface);
+   if (!ut->ip)
+   {
+-    ushare_free (ut);
+-    return EXIT_FAILURE;
+-  }
+-
+-  if (ut->daemon)
+-  {
+-    int err;
+- 
+-    /* uClibc daemon() has problems with pthread and friends */
+-    /* workaround from http://www.mail-archive.com/uclibc@uclibc.org/msg01073.html */
+-    /* res = daemon(0, 0); */
+-    err = ushare_daemon (0, 0);
+-    if (err == -1)
+-    {
+-      log_error (_("Error: failed to daemonize program : %s\n"),
+-                 strerror (err));
+-      ushare_free (ut);
+-      return EXIT_FAILURE;
+-    }
+-  }
+-  else
+-  {
+-    display_headers ();
++    ret = EXIT_FAILURE;
++    goto clean_after_nbd_open;
+   }
+ 
+   signal (SIGINT, UPnPBreak);
+@@ -906,8 +926,8 @@ main (int argc, char **argv)
+   {
+     if (ctrl_telnet_start (ut->telnet_port) < 0)
+     {
+-      ushare_free (ut);
+-      return EXIT_FAILURE;
++      ret = EXIT_FAILURE;
++      goto clean_after_nbd_open;
+     }
+     
+     ctrl_telnet_register ("kill", ushare_kill,
+@@ -917,24 +937,41 @@ main (int argc, char **argv)
+   if (init_upnp (ut) < 0)
+   {
+     finish_upnp (ut);
+-    ushare_free (ut);
+-    return EXIT_FAILURE;
++    if (ut->use_telnet)
++      ctrl_telnet_stop ();
++    ret = EXIT_FAILURE;
++    goto clean_after_nbd_open;
+   }
+ 
+   build_metadata_list (ut);
+-
++  
++  nbd_status_set("ushare_status", "up");
++  
+   /* Let main sleep until it's time to die... */
+   pthread_mutex_lock (&ut->termination_mutex);
+   pthread_cond_wait (&ut->termination_cond, &ut->termination_mutex);
+   pthread_mutex_unlock (&ut->termination_mutex);
+ 
++  if(ut->nr_entries == 0)
++  {
++    /* if no entry, SIGINT is raised in build_metadata_list */
++    nbd_status_set("ushare_errno", "noshare");
++  }
++  
+   if (ut->use_telnet)
+     ctrl_telnet_stop ();
+   finish_upnp (ut);
+   free_metadata_list (ut);
++  
++clean_after_nbd_open:
+   ushare_free (ut);
+   finish_iconv ();
+ 
++  nbd_status_set("ushare_status", "down");
++  nbd_status_set("ushare_sharedcount", "0");
++  
++  nbd_close();
++
+   /* it should never be executed */
+-  return EXIT_SUCCESS;
++  return ret ;
+ }
+diff -pruN ./ushare-1.1a.orig/src/ushare.h ushare-1.1a/src/ushare.h
+--- ./ushare-1.1a.orig/src/ushare.h	2009-02-20 18:30:19.721834723 +0100
++++ ushare-1.1a/src/ushare.h	2009-02-20 18:55:55.264323193 +0100
+@@ -97,6 +97,7 @@ struct ushare_t {
+   struct rbtree *rb;
+   struct upnp_entry_t *root_entry;
+   int nr_entries;
++  int nr_entries_file;
+   int starting_id;
+   int init;
+   UpnpDevice_Handle dev;

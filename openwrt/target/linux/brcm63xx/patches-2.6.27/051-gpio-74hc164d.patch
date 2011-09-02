@@ -1,0 +1,23 @@
+--- linux-2.6.27.21/drivers/gpio/Kconfig	2009-04-10 16:27:26.906306576 +0200
++++ linux-2.6.27.21/drivers/gpio/Kconfig	2009-04-10 16:30:13.305415403 +0200
+@@ -145,6 +145,13 @@ config GPIO_BT8XX
+ 
+ 	  If unsure, say N.
+ 
++config GPIO_74HC164D
++	tristate "neufbox 74HC164d"
++	depends on BOARD_NEUFBOX4
++	help
++	  neufbox GPIO 74HC164d
++	  If unsure, say N.
++
+ comment "SPI GPIO expanders:"
+ 
+ config GPIO_MAX7301
+--- linux-2.6.27.21/drivers/gpio/Makefile	2009-04-10 16:27:26.906306576 +0200
++++ linux-2.6.27.21/drivers/gpio/Makefile	2009-04-10 16:28:31.651963495 +0200
+@@ -10,3 +10,4 @@ obj-$(CONFIG_GPIO_MCP23S08)	+= mcp23s08.
+ obj-$(CONFIG_GPIO_PCA953X)	+= pca953x.o
+ obj-$(CONFIG_GPIO_PCF857X)	+= pcf857x.o
+ obj-$(CONFIG_GPIO_BT8XX)	+= bt8xxgpio.o
++obj-$(CONFIG_GPIO_74HC164D)	+= 74hc164d.o

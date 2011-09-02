@@ -1,0 +1,560 @@
+--- linux-2.6.21.7/include/linux/netfilter/nf_conntrack_common.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/linux/netfilter/nf_conntrack_common.h	2008-10-10 02:43:10.000000000 +0200
+@@ -73,6 +73,12 @@ enum ip_conntrack_status {
+ 	/* Connection has fixed timeout. */
+ 	IPS_FIXED_TIMEOUT_BIT = 10,
+ 	IPS_FIXED_TIMEOUT = (1 << IPS_FIXED_TIMEOUT_BIT),
++
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++    /* Conntrack eligible for Blogging */
++    IPS_BLOG_BIT = 11,
++    IPS_BLOG = (1 << IPS_BLOG_BIT),
++#endif
+ };
+ 
+ /* Connection tracking event bits */
+@@ -129,6 +135,12 @@ enum ip_conntrack_events
+ 	/* Mark is set */
+ 	IPCT_MARK_BIT = 12,
+ 	IPCT_MARK = (1 << IPCT_MARK_BIT),
++
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++    /* Conntrack is Blogged */
++    IPCT_BLOG_BIT = 13,
++    IPCT_BLOG = (1 << IPCT_BLOG_BIT),
++#endif
+ };
+ 
+ enum ip_conntrack_expect_events {
+diff -pNur linux-2.6.21.7/include/linux/skbuff.h linux-2.6.21.7/include/linux/skbuff.h
+--- linux-2.6.21.7/include/linux/skbuff.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/linux/skbuff.h	2008-06-25 18:34:08.000000000 +0200
+@@ -44,6 +44,19 @@
+ #define SKB_MAX_HEAD(X)		(SKB_MAX_ORDER((X), 0))
+ #define SKB_MAX_ALLOC		(SKB_MAX_ORDER(0, 2))
+ 
++#if defined(CONFIG_MIPS_BRCM)
++#define FROM_WAN                0x1000
++#define SKB_DATA_PREALLOC       (1<<0)
++#define SKB_PREALLOC	        (1<<1)
++#define SKB_FROM_XMIT_CLEAN		(1<<2)
++#define RETFREEQ_SKB            (1<<16)
++#define RETFREEQ_DATA           (1<<17)
++#if defined(CONFIG_BLOG)
++struct blog_t;
++#endif
++#endif
++
++
+ /* A. Checksumming of received packets by device.
+  *
+  *	NONE: device failed to checksum this packet.
+@@ -232,6 +245,12 @@ struct sk_buff {
+ 	struct sk_buff		*next;
+ 	struct sk_buff		*prev;
+ 
++#if defined(CONFIG_MIPS_BRCM) // BRCM change Begin
++	struct sk_buff_head     *list;
++#if defined(CONFIG_BLOG)
++    struct blog_t           *blog_p;
++#endif
++#endif // BRCM change End
+ 	struct sock		*sk;
+ 	struct skb_timeval	tstamp;
+ 	struct net_device	*dev;
+@@ -288,6 +307,11 @@ struct sk_buff {
+ 				ipvs_property:1;
+ 	__be16			protocol;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++	char			*extif;
++#define BCM_IGMP_SNP_BUFSZ     64
++#endif /* CONFIG_MIPS_BRCM */
++
+ 	void			(*destructor)(struct sk_buff *skb);
+ #ifdef CONFIG_NETFILTER
+ 	struct nf_conntrack	*nfct;
+@@ -313,6 +337,27 @@ struct sk_buff {
+ 
+ 	__u32			mark;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++   __u16			vtag;
++   __u16       vtag_save;
++#endif
++
++#if defined(CONFIG_MIPS_BRCM)
++	/* Call back function to return the buffer or skb itself back to the free queue
++	 * if the buffer or skb is pre-allocated and reused in our drivers such as atm or eth driver.
++	 * It's called by kfree_skbmem or skb_release_data depending on
++	 * whether the flag is FREE_SKB or FREE_DATA
++	 */
++	void			(*retfreeq_cb)(void *, struct sk_buff *, unsigned);
++	void			*retfreeq_context;	
++	/* retfreeq_skb_prealloc : flag to indicate whether the skb is 
++	 * preallocated by our drivers. Cloned skb should NOT have this flag set. 
++	 * retfreeq_data_prealloc: flag to indicate whether the data buffer associated
++	 * with the skb is preallocated by the drivers. (Song Wang: songw@broadcom.com)
++	 */
++    unsigned short      retfreeq_flags;
++#endif	
++
+ 	/* These elements must be at the end, see alloc_skb() for details.  */
+ 	unsigned int		truesize;
+ 	atomic_t		users;
+@@ -405,6 +468,47 @@ extern unsigned int   skb_find_text(stru
+ /* Internal */
+ #define skb_shinfo(SKB)		((struct skb_shared_info *)((SKB)->end))
+ 
++#if defined(CONFIG_MIPS_BRCM)
++/**
++ *	skb_headerinit	-	initialize a socket buffer header
++ *	@size: size to allocate
++ *	@skb: skb allocated by caller
++ *	@data: data buffer allocated by caller
++ *	@retfreeq_cb: callback function to free data buffer and skb
++ *	@retskb_ctx: context value passed to retfreeq_cb
++ *
++ *	Initializes the socket buffer and assigns the data buffer to it.
++ *
++ */
++static inline void skb_hdrinit(unsigned int offset, unsigned int size,
++    struct sk_buff *skb, unsigned char *data,
++    void (*retfreeq_cb)(void *, struct sk_buff *, unsigned), void *retfreeq_ctx,
++    unsigned short rcvfrom)
++{
++	memset(skb, 0, offsetof(struct sk_buff, truesize));
++
++	skb->truesize = size + sizeof(struct sk_buff);
++	atomic_set(&skb->users, 1);
++	skb->head = data - offset;
++	skb->data = data;
++	skb->tail = data + size;
++	skb->end  = (unsigned char *) (((unsigned long) data + size + 0x0f) & ~0x0f);
++	skb->len = size;
++
++	skb->retfreeq_cb = retfreeq_cb;
++	skb->retfreeq_context = retfreeq_ctx;
++	skb->retfreeq_flags = SKB_PREALLOC | SKB_DATA_PREALLOC;
++
++	atomic_set(&(skb_shinfo(skb)->dataref), 1);
++	skb_shinfo(skb)->nr_frags = 0;
++	skb_shinfo(skb)->gso_size = 0;
++	skb_shinfo(skb)->gso_segs = 0;
++	skb_shinfo(skb)->gso_type = 0;
++	skb_shinfo(skb)->ip6_frag_id = 0;	
++	skb_shinfo(skb)->frag_list = NULL;
++}
++#endif
++
+ /**
+  *	skb_queue_empty - check if a queue is empty
+  *	@list: queue head
+diff -pNur linux-2.6.21.7/include/linux/sockios.h linux-2.6.21.7/include/linux/sockios.h
+--- linux-2.6.21.7/include/linux/sockios.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/linux/sockios.h	2008-06-25 18:34:10.000000000 +0200
+@@ -88,6 +88,9 @@
+ #define SIOCDARP	0x8953		/* delete ARP table entry	*/
+ #define SIOCGARP	0x8954		/* get ARP table entry		*/
+ #define SIOCSARP	0x8955		/* set ARP table entry		*/
++#if defined(CONFIG_MIPS_BRCM) || !defined(__KERNEL__)
++#define SIOCSDMZ	0x8956
++#endif
+ 
+ /* RARP cache control calls. */
+ #define SIOCDRARP	0x8960		/* delete RARP table entry	*/
+@@ -107,6 +110,7 @@
+ #define SIOCGIFVLAN	0x8982		/* 802.1Q VLAN support		*/
+ #define SIOCSIFVLAN	0x8983		/* Set 802.1Q VLAN options 	*/
+ 
++
+ /* bonding calls */
+ 
+ #define SIOCBONDENSLAVE	0x8990		/* enslave a device to the bond */
+@@ -122,6 +126,15 @@
+ #define SIOCBRADDIF	0x89a2		/* add interface to bridge      */
+ #define SIOCBRDELIF	0x89a3		/* remove interface from bridge */
+ 
++#if defined(CONFIG_MIPS_BRCM) || !defined(__KERNEL__)
++/***********************BRCM global ioctl calls*****************************/
++#define SIOC_BRCM_GLOBAL_BASE    0x89c0
++#define SIOCGIFTRANSSTART  (SIOC_BRCM_GLOBAL_BASE+0)    /* Used by SNMP */
++#define SIOCCIFSTATS  (SIOC_BRCM_GLOBAL_BASE+1)  /* Clean up the Stats of a device */
++/* same as smuxctl.c in busybox */
++#define SIOCSIFSMUX    (SIOC_BRCM_GLOBAL_BASE+2) /* smux */
++#endif
++
+ /* Device private ioctl calls */
+ 
+ /*
+diff --exclude=.svn -pNur linux-2.6.21.7/net/core/dev.c linux-2.6.21.7/net/core/dev.c
+--- linux-2.6.21.7/net/core/dev.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/core/dev.c	2008-10-13 18:23:39.000000000 +0200
+@@ -181,6 +181,11 @@ DEFINE_RWLOCK(dev_base_lock);
+ EXPORT_SYMBOL(dev_base);
+ EXPORT_SYMBOL(dev_base_lock);
+ 
++#if defined(CONFIG_BCM_P8021AG) || defined(CONFIG_BCM_P8021AG_MODULE)
++int (*p8021ag_hook)(struct sk_buff *skb);
++EXPORT_SYMBOL_GPL(p8021ag_hook);
++#endif
++
+ #define NETDEV_HASHBITS	8
+ static struct hlist_head dev_name_head[1<<NETDEV_HASHBITS];
+ static struct hlist_head dev_index_head[1<<NETDEV_HASHBITS];
+@@ -1708,6 +1707,20 @@ static __inline__ int handle_bridge(stru
+ 	if ((*pskb)->pkt_type == PACKET_LOOPBACK ||
+ 	    (port = rcu_dereference((*pskb)->dev->br_port)) == NULL)
+ 		return 0;
++	
++#if defined(CONFIG_MIPS_BRCM_DISABLE)
++        /* handle VLAN tagged packets before bridging */
++        if (rcu_dereference(*pskb)->protocol == __constant_htons(ETH_P_8021Q))
++            return 0;
++#endif
++
++#if defined(CONFIG_MIPS_BRCM)
++        if (rcu_dereference(*pskb)->protocol == __constant_htons(ETH_P_PPP_SES) || rcu_dereference(*pskb)->protocol == __constant_htons(ETH_P_PPP_DISC)) {
++                if (!memcmp(rcu_dereference(*pskb)->mac.raw, rcu_dereference(*pskb)->dev->dev_addr,ETH_ALEN)) {
++                    return 0;
++                }
++        }
++#endif
+ 
+ 	if (*pt_prev) {
+ 		*ret = deliver_skb(*pskb, *pt_prev, orig_dev);
+@@ -1849,9 +1849,28 @@ int netif_receive_skb(struct sk_buff *sk
+ ncls:
+ #endif
+ 
++#if defined(CONFIG_BCM_P8021AG) || defined(CONFIG_BCM_P8021AG_MODULE)
++	if (((skb->protocol == __constant_htons(ETH_P_8021AG)) || 
++		 (skb->protocol == __constant_htons(ETH_P_8021Q) && *(unsigned short *) &skb->data[2] == ETH_P_8021AG))
++		 && p8021ag_hook && !p8021ag_hook(skb) )
++        goto out;
++		
++#endif
++
+ 	if (handle_bridge(&skb, &pt_prev, &ret, orig_dev))
+ 		goto out;
+ 
++#if defined(CONFIG_BCM_SMUX)
++        /* 
++         * ServiceMUX/MSC interface has to get all packets. 
++         * Packet handler does not work in this case
++         */
++        if(orig_dev->priv_flags & IFF_RSMUX) {
++                atomic_inc(&skb->users);
++                ret = smux_pkt_recv(skb, skb->dev, orig_dev);
++        }
++        else {
++#endif /* CONFIG_BCM_SMUX */
+ 	type = skb->protocol;
+ 	list_for_each_entry_rcu(ptype, &ptype_base[ntohs(type)&15], list) {
+ 		if (ptype->type == type &&
+@@ -1861,6 +1880,9 @@ ncls:
+ 			pt_prev = ptype;
+ 		}
+ 	}
++#if defined(CONFIG_BCM_SMUX)
++        }
++#endif /* CONFIG_BCM_SMUX */
+ 
+ 	if (pt_prev) {
+ 		ret = pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
+@@ -2506,10 +2542,25 @@ static int dev_ifsioc(struct ifreq *ifr,
+ 					   (currently unused) */
+ 			return -EOPNOTSUPP;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++		case SIOCGIFTRANSSTART:
++		   ifr->ifr_ifru.ifru_ivalue = dev->trans_start;
++		   return 0;
++#endif
++
+ 		case SIOCGIFMTU:	/* Get the MTU of a device */
+ 			ifr->ifr_mtu = dev->mtu;
+ 			return 0;
+ 
++#if defined(CONFIG_MIPS_BRCM)
++		case SIOCCIFSTATS:	/* Clean up the Stats of a device */
++			{
++			struct net_device_stats * pStats = dev->get_stats(dev);
++			memset(pStats, 0, sizeof(struct net_device_stats));
++			}
++			return 0;
++#endif
++
+ 		case SIOCSIFMTU:	/* Set the MTU of a device */
+ 			return dev_set_mtu(dev, ifr->ifr_mtu);
+ 
+@@ -2685,6 +2736,9 @@ int dev_ioctl(unsigned int cmd, void __u
+ 		case SIOCGIFMAP:
+ 		case SIOCGIFINDEX:
+ 		case SIOCGIFTXQLEN:
++#if defined(CONFIG_MIPS_BRCM)
++		case SIOCGIFTRANSSTART:
++#endif
+ 			dev_load(ifr.ifr_name);
+ 			read_lock(&dev_base_lock);
+ 			ret = dev_ifsioc(&ifr, cmd);
+@@ -2784,6 +2838,9 @@ int dev_ioctl(unsigned int cmd, void __u
+ 		 */
+ 		default:
+ 			if (cmd == SIOCWANDEV ||
++#if defined(CONFIG_MIPS_BRCM)
++			    cmd == SIOCCIFSTATS ||
++#endif                
+ 			    (cmd >= SIOCDEVPRIVATE &&
+ 			     cmd <= SIOCDEVPRIVATE + 15)) {
+ 				dev_load(ifr.ifr_name);
+@@ -3069,9 +3112,36 @@ EXPORT_SYMBOL(register_netdev);
+ static void netdev_wait_allrefs(struct net_device *dev)
+ {
+ 	unsigned long rebroadcast_time, warning_time;
++	int refcnt;
+ 
+ 	rebroadcast_time = warning_time = jiffies;
+-	while (atomic_read(&dev->refcnt) != 0) {
++	while ((refcnt = atomic_read(&dev->refcnt)) != 0) {
++
++// I don't want to just delete the lines because we need to put it back the 
++// Workaround in case we cannot find the root cause
++//#if defined(SUPPORT_TC)
++      /* decrement on ppp net work device reference count (refcnt)
++       * in sch_generic.c could result -1 and it should be reset to 0 
++       */
++      if (refcnt == -1 && strstr(dev->name, "ppp_")) {
++	      printk("dev->name = %s, dev->refcnt=%d\n", dev->name, refcnt);
++	      //atomic_set(&dev->refcnt, 0);		
++		panic("Negative ref count");
++	      printk("Reset to 0, dev->refcnt=%d\n", atomic_read(&dev->refcnt));
++         break;
++      }
++//#endif		
++#if defined(CONFIG_MIPS_BRCM)
++      /* if eth? device reference counter goes to negative, reset to 0 and get out the while loop */
++      if (refcnt < 0 && strstr(dev->name, "eth")) {
++	      printk("dev->name = %s, dev->refcnt=%d\n", dev->name, refcnt);
++         //atomic_set(&dev->refcnt, 0);		
++	 panic("Negative ref count");
++         printk("Reset to 0, dev->refcnt=%d\n", atomic_read(&dev->refcnt));
++         break;
++      }
++#endif
++
+ 		if (time_after(jiffies, rebroadcast_time + 1 * HZ)) {
+ 			rtnl_lock();
+ 
+diff --exclude=.svn -pNur linux-2.6.21.7/net/core/Makefile linux-2.6.21.7/net/core/Makefile
+--- linux-2.6.21.7/net/core/Makefile	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/core/Makefile	2008-10-13 18:23:39.000000000 +0200
+@@ -2,6 +2,10 @@
+ # Makefile for the Linux networking core.
+ #
+ 
++ifneq ($(strip $(BRCM_KERNEL_NETQOS)),)
++CFLAGS += -DSUPPORT_TC
++endif
++
+ obj-y := sock.o request_sock.o skbuff.o iovec.o datagram.o stream.o scm.o \
+ 	 gen_stats.o gen_estimator.o
+ 
+@@ -11,3 +15,4 @@ obj-y		     += dev.o ethtool.o dev_mcast
+ obj-$(CONFIG_NETPOLL) += netpoll.o
+ obj-$(CONFIG_NET_DMA) += user_dma.o
+ obj-$(CONFIG_FIB_RULES) += fib_rules.o
++obj-$(CONFIG_BLOG) += blog.o
+diff --exclude=.svn -pNur linux-2.6.21.7/net/core/skbuff.c linux-2.6.21.7/net/core/skbuff.c
+--- linux-2.6.21.7/net/core/skbuff.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/core/skbuff.c	2008-10-13 18:23:39.000000000 +0200
+@@ -66,6 +66,9 @@
+ #include <asm/system.h>
+ 
+ #include "kmap_skb.h"
++#if defined(CONFIG_MIPS_BRCM)		// BRCM change Begin
++#include <linux/blog.h>				/* CONFIG_BLOG */
++#endif								// BRCM change End
+ 
+ static struct kmem_cache *skbuff_head_cache __read_mostly;
+ static struct kmem_cache *skbuff_fclone_cache __read_mostly;
+@@ -169,6 +172,11 @@ struct sk_buff *__alloc_skb(unsigned int
+ 	skb->data = data;
+ 	skb->tail = data;
+ 	skb->end  = data + size;
++
++#if defined(CONFIG_MIPS_BRCM)
++	skb->extif = NULL;
++#endif /* CONFIG_MIPS_BRCM */
++
+ 	/* make sure we initialize shinfo sequentially */
+ 	shinfo = skb_shinfo(skb);
+ 	atomic_set(&shinfo->dataref, 1);
+@@ -263,6 +269,18 @@ static void skb_release_data(struct sk_b
+ 		if (skb_shinfo(skb)->frag_list)
+ 			skb_drop_fraglist(skb);
+ 
++#if defined(CONFIG_MIPS_BRCM)
++		/*
++		 * If skb->retfreeq_data_prealloc is 1, that means the data buffer was pre-allocated
++	 	 * by our network driver. (songw)
++	 	 */
++		if (skb->retfreeq_cb && (skb->retfreeq_flags & SKB_DATA_PREALLOC)) {
++			(*skb->retfreeq_cb)(skb->retfreeq_context, skb, RETFREEQ_DATA);
++
++			skb->retfreeq_flags &= ~(SKB_DATA_PREALLOC | SKB_FROM_XMIT_CLEAN);
++		}
++		else
++#endif
+ 		kfree(skb->head);
+ 	}
+ }
+@@ -276,6 +294,22 @@ void kfree_skbmem(struct sk_buff *skb)
+ 	atomic_t *fclone_ref;
+ 
+ 	skb_release_data(skb);
++#if defined(CONFIG_MIPS_BRCM)
++	if(skb->extif != NULL) {
++		kfree(skb->extif);
++		skb->extif = NULL;
++	}
++
++	blog_free(skb);		/* CONFIG_BLOG: Frees associated blog object */
++	/*
++	 * If skb->retfreeq_skb_prealloc is 1, that means the skb was pre-allocated
++ 	 * by our network driver. (songw)
++ 	 */
++	if (skb->retfreeq_cb && (skb->retfreeq_flags & SKB_PREALLOC)) {
++		(*skb->retfreeq_cb)(skb->retfreeq_context, skb, RETFREEQ_SKB);
++	}
++	else {
++#endif
+ 	switch (skb->fclone) {
+ 	case SKB_FCLONE_UNAVAILABLE:
+ 		kmem_cache_free(skbuff_head_cache, skb);
+@@ -300,6 +334,9 @@ void kfree_skbmem(struct sk_buff *skb)
+ 			kmem_cache_free(skbuff_fclone_cache, other);
+ 		break;
+ 	};
++#if defined(CONFIG_MIPS_BRCM)
++	}
++#endif	
+ }
+ 
+ /**
+@@ -376,6 +417,7 @@ void kfree_skb(struct sk_buff *skb)
+ struct sk_buff *skb_clone(struct sk_buff *skb, gfp_t gfp_mask)
+ {
+ 	struct sk_buff *n;
++	char *extif = NULL;
+ 
+ 	n = skb + 1;
+ 	if (skb->fclone == SKB_FCLONE_ORIG &&
+@@ -445,6 +487,31 @@ struct sk_buff *skb_clone(struct sk_buff
+ #endif
+ 	skb_copy_secmark(n, skb);
+ #endif
++#if defined(CONFIG_MIPS_BRCM)
++	C(vtag);
++	C(vtag_save);
++	blog_xfer(n, skb);	/* CONFIG_BLOG: transfers blog ownership */
++	C(retfreeq_flags);
++	n->retfreeq_flags &= ~SKB_PREALLOC;
++	C(retfreeq_cb);
++	C(retfreeq_context);
++	n->extif = NULL;
++
++	if(skb->extif) {
++		extif = kmalloc(BCM_IGMP_SNP_BUFSZ, GFP_ATOMIC);
++		if(extif) {
++			memcpy(extif, skb->extif, BCM_IGMP_SNP_BUFSZ);
++			n->extif = extif;
++		}
++	}
++//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++#if 0
++	n->nat_cache_hit = 0;
++	n->nat_cache_rule = NULL;
++	n->nat_cache_modify = NULL;
++	n->nat_cache_add = NULL;    
++#endif
++#endif
+ 	C(truesize);
+ 	atomic_set(&n->users, 1);
+ 	C(head);
+@@ -464,6 +532,9 @@ static void copy_skb_header(struct sk_bu
+ 	 *	Shift between the two data areas in bytes
+ 	 */
+ 	unsigned long offset = new->data - old->data;
++#if defined (CONFIG_MIPS_BRCM)
++	char *extif = NULL;
++#endif /* CONFIG_MIPS_BRCM */
+ 
+ 	new->sk		= NULL;
+ 	new->dev	= old->dev;
+@@ -506,6 +577,32 @@ static void copy_skb_header(struct sk_bu
+ 	new->tc_index	= old->tc_index;
+ #endif
+ 	skb_copy_secmark(new, old);
++#if defined(CONFIG_MIPS_BRCM)
++	new->vtag = old->vtag;
++	new->vtag_save = old->vtag_save;
++	blog_xfer(new, old);	/* CONFIG_BLOG: transfers blog ownership */
++	new->retfreeq_cb = NULL;
++	new->retfreeq_context = NULL;
++	new->retfreeq_flags = 0;
++
++	new->extif = NULL;
++
++	if(old->extif) {
++		extif = kmalloc(BCM_IGMP_SNP_BUFSZ, GFP_ATOMIC);
++		if(extif) {
++			memcpy(extif, old->extif, BCM_IGMP_SNP_BUFSZ);
++			new->extif = extif;
++		}
++	}
++       
++//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++#if 0
++	new->nat_cache_hit = 0;
++	new->nat_cache_rule = NULL;
++	new->nat_cache_modify = NULL;
++	new->nat_cache_add = NULL;
++#endif
++#endif
+ 	atomic_set(&new->users, 1);
+ 	skb_shinfo(new)->gso_size = skb_shinfo(old)->gso_size;
+ 	skb_shinfo(new)->gso_segs = skb_shinfo(old)->gso_segs;
+@@ -667,6 +765,12 @@ int pskb_expand_head(struct sk_buff *skb
+ 	skb->h.raw   += off;
+ 	skb->nh.raw  += off;
+ 	skb->cloned   = 0;
++#if defined(CONFIG_MIPS_BRCM)
++	/* The data buffer of this skb is not pre-allocated any more
++	 * even the skb itself is pre-allocated. (songw)    
++	 */
++	skb->retfreeq_flags &= ~SKB_DATA_PREALLOC;
++#endif
+ 	skb->nohdr    = 0;
+ 	atomic_set(&skb_shinfo(skb)->dataref, 1);
+ 	return 0;
+diff --exclude=.svn -pNur linux-2.6.21.7/net/Kconfig linux-2.6.21.7/net/Kconfig
+--- linux-2.6.21.7/net/Kconfig	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/Kconfig	2008-10-13 18:23:39.000000000 +0200
+@@ -61,6 +61,16 @@ config INET
+ 
+ 	  Short answer: say Y.
+ 
++# CONFIG_MIPS_BRCM Begin Broadcom added code
++config BLOG
++	bool "Enable Network Buffer Logging"
++	---help---
++	  Debug logging of protocol header information of a network packet
++	  buffer as it traverses the Linux networking stack.
++
++	  Say N unless you wish to debug kernel networking stack.
++# CONFIG_MIPS_BRCM End Broadcom added code.
++
+ if INET
+ source "net/ipv4/Kconfig"
+ source "net/ipv6/Kconfig"

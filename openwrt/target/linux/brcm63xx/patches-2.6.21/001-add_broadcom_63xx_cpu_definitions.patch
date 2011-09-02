@@ -1,0 +1,164 @@
+diff -pNur linux-2.6.21.7/arch/mips/kernel/cpu-probe.c linux-2.6.21.7/arch/mips/kernel/cpu-probe.c
+--- linux-2.6.21.7/arch/mips/kernel/cpu-probe.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/kernel/cpu-probe.c	2008-06-25 18:34:00.000000000 +0200
+@@ -159,6 +159,9 @@ static inline void check_wait(void)
+ 	case CPU_5KC:
+ 	case CPU_25KF:
+  	case CPU_PR4450:
++	case CPU_BCM6338:
++	case CPU_BCM6348:
++	case CPU_BCM6358:
+ 		cpu_wait = r4k_wait;
+ 		break;
+ 
+@@ -730,6 +730,40 @@ static inline void cpu_probe_sibyte(stru
+ 	}
+ }
+ 
++#if defined(CONFIG_MIPS_BRCM)
++static inline void cpu_probe_broadcom(struct cpuinfo_mips *c)
++{
++	c->cputype = CPU_UNKNOWN;
++
++	decode_config1(c);
++	switch (c->processor_id & 0xff00) {
++	case PRID_IMP_BCM6338:          
++		c->cputype = CPU_BCM6338;
++		break;
++	case PRID_IMP_BCM6348:
++		c->cputype = CPU_BCM6348;
++		break;
++	case PRID_IMP_BCM4350:
++		switch (c->processor_id & 0xf0) {
++		case PRID_REV_BCM6358:
++			c->cputype = CPU_BCM6358;
++			break;
++		case PRID_REV_BCM6368:
++			c->cputype = CPU_BCM6368;
++			break;
++		case PRID_REV_BCM6816:
++			c->cputype = CPU_BCM6816;
++			break;
++		default:
++			break;
++		}
++		break;
++	default:
++		break;
++	}
++}
++#endif
++
+ static inline void cpu_probe_sandcraft(struct cpuinfo_mips *c)
+ {
+ 	decode_configs(c);
+@@ -779,6 +813,11 @@ __init void cpu_probe(void)
+ 	case PRID_COMP_SIBYTE:
+ 		cpu_probe_sibyte(c);
+ 		break;
++#if defined(CONFIG_MIPS_BRCM)
++	case PRID_COMP_BROADCOM:
++		cpu_probe_broadcom(c);
++		break;
++#endif
+ 	case PRID_COMP_SANDCRAFT:
+ 		cpu_probe_sandcraft(c);
+ 		break;
+diff -pNur linux-2.6.21.7/arch/mips/kernel/proc.c linux-2.6.21.7/arch/mips/kernel/proc.c
+--- linux-2.6.21.7/arch/mips/kernel/proc.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/kernel/proc.c	2008-06-25 18:34:00.000000000 +0200
+@@ -16,7 +16,11 @@
+ #include <asm/processor.h>
+ #include <asm/watch.h>
+ 
++
+ unsigned int vced_count, vcei_count;
++#if defined(CONFIG_MIPS_BRCM)
++extern unsigned long unaligned_instructions;
++#endif
+ 
+ static const char *cpu_name[] = {
+ 	[CPU_UNKNOWN]	= "unknown",
+@@ -84,6 +88,13 @@ static const char *cpu_name[] = {
+ 	[CPU_VR4181A]	= "NEC VR4181A",
+ 	[CPU_SR71000]	= "Sandcraft SR71000",
+ 	[CPU_PR4450]	= "Philips PR4450",
++#if defined(CONFIG_MIPS_BRCM)
++	[CPU_BCM6338]   = "BCM6338",
++	[CPU_BCM6348]   = "BCM6348",
++	[CPU_BCM6358]   = "BCM6358",
++	[CPU_BCM6368]   = "BCM6368",
++	[CPU_BCM6816]   = "BCM6816"
++#endif
+ };
+ 
+ 
+@@ -131,12 +142,14 @@ static int show_cpuinfo(struct seq_file 
+ 		      cpu_has_dsp ? " dsp" : "",
+ 		      cpu_has_mipsmt ? " mt" : ""
+ 		);
+-
+ 	sprintf(fmt, "VCE%%c exceptions\t\t: %s\n",
+ 	        cpu_has_vce ? "%u" : "not available");
+ 	seq_printf(m, fmt, 'D', vced_count);
+ 	seq_printf(m, fmt, 'I', vcei_count);
+ 	seq_printf(m, "\n");
++#if defined(CONFIG_MIPS_BRCM)
++	seq_printf(m, "unaligned exceptions\t\t: %ld\n", unaligned_instructions);
++#endif
+ 
+ 	return 0;
+ }
+diff -pNur linux-2.6.21.7/arch/mips/mm/tlbex.c linux-2.6.21.7/arch/mips/mm/tlbex.c
+--- linux-2.6.21.7/arch/mips/mm/tlbex.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/arch/mips/mm/tlbex.c	2008-06-25 18:34:01.000000000 +0200
+@@ -852,6 +852,12 @@ static __init void build_tlb_write_entry
+ 	case CPU_R4400PC:
+ 	case CPU_R4400SC:
+ 	case CPU_R4400MC:
++#if defined(CONFIG_MIPS_BRCM)
++	case CPU_BCM6338:
++	case CPU_BCM6348:
++	case CPU_BCM6358:
++	case CPU_BCM6368:
++#endif
+ 		/*
+ 		 * This branch uses up a mtc0 hazard nop slot and saves
+ 		 * two nops after the tlbw instruction.
+diff -pNur linux-2.6.21.7/include/asm-mips/cpu.h linux-2.6.21.7/include/asm-mips/cpu.h
+--- linux-2.6.21.7/include/asm-mips/cpu.h	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/include/asm-mips/cpu.h	2008-06-25 18:34:04.000000000 +0200
+@@ -90,6 +90,16 @@
+ #define PRID_IMP_24KE		0x9600
+ #define PRID_IMP_74K		0x9700
+ 
++#if defined(CONFIG_MIPS_BRCM)
++#define PRID_IMP_BCM6338	0x9000
++#define PRID_IMP_BCM6348	0x9100
++
++#define PRID_IMP_BCM4350	0xA000
++#define PRID_REV_BCM6358	0x0010
++#define PRID_REV_BCM6368	0x0030
++#define PRID_REV_BCM6816	0x0040 /* actual value TBD */
++#endif
++
+ /*
+  * These are the PRID's for when 23:16 == PRID_COMP_SIBYTE
+  */
+@@ -211,7 +221,16 @@
+ #define CPU_SB1A		62
+ #define CPU_74K			63
+ #define CPU_R14000		64
++#if defined(CONFIG_MIPS_BRCM)
++#define CPU_BCM6338		65
++#define CPU_BCM6348		66
++#define CPU_BCM6358		67
++#define CPU_BCM6368		68
++#define CPU_BCM6816		69
++#define CPU_LAST		69
++#else
+ #define CPU_LAST		64
++#endif
+ 
+ /*
+  * ISA Level encodings

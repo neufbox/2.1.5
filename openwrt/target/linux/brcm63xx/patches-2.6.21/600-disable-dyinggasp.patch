@@ -1,0 +1,12 @@
+diff --exclude=.svn -pNur linux-2.6.21.7/arch/mips/bcm63xx/boardparms.c linux-2.6.21.7/arch/mips/bcm63xx/boardparms.c
+--- linux-2.6.21.7/arch/mips/bcm63xx/boardparms.c	2008-12-19 12:18:12.552984425 +0100
++++ linux-2.6.21.7/arch/mips/bcm63xx/boardparms.c	2008-12-19 12:18:41.630492766 +0100
+@@ -1188,7 +1188,7 @@ static BOARD_PARAMETERS g_bcm96358vw =
+     BP_NOT_DEFINED,                         /* usGpioBondingSecondaryReset */
+ #endif /* CONFIG_LEDS_NEUFBOX */
+ 
+-    BP_HW_DEFINED,                          /* usExtIntrAdslDyingGasp */
++    BP_NOT_DEFINED,                         /* usExtIntrAdslDyingGasp */
+ #ifndef CONFIG_BOARD_NEUFBOX4
+     BP_EXT_INTR_0,                          /* usExtIntrResetToDefault */
+     BP_EXT_INTR_3,                          /* usExtIntrSesBtnWireless */

@@ -1,0 +1,59 @@
+diff --exclude=.svn -pNur ushare-1.1a/src/ushare.c ushare-1.1a/src/ushare.c
+--- ushare-1.1a/src/ushare.c	2009-01-05 14:00:39.244561607 +0100
++++ ushare-1.1a/src/ushare.c	2009-01-05 14:08:34.164285422 +0100
+@@ -772,6 +772,42 @@ ushare_kill (ctrl_telnet_client *client,
+   ushare_signal_exit ();
+ }
+ 
++int ushare_daemon(int nochdir, int noclose)
++{
++	int fd;
++	int res;
++
++	switch (res = fork()) {
++		case -1:
++			return(-1);
++		case 0:
++			break;
++		default:
++			_exit(0);
++	}
++
++	res=setsid();
++	if (res == -1) {
++		return(-1);
++	}
++
++	if (!nochdir) {
++		chdir("/");
++	}
++
++	if (!noclose) {
++		if (fd = open("/dev/null", O_RDWR, 0) != -1) {
++			dup2(fd, STDIN_FILENO);
++			dup2(fd, STDOUT_FILENO);
++			dup2(fd, STDERR_FILENO);
++			if (fd > 2)
++				close(fd);
++		}
++	}
++
++	return 0;
++}
++
+ int
+ main (int argc, char **argv)
+ {
+@@ -845,7 +881,11 @@ main (int argc, char **argv)
+   if (ut->daemon)
+   {
+     int err;
+-    err = daemon (0, 0);
++ 
++    /* uClibc daemon() has problems with pthread and friends */
++    /* workaround from http://www.mail-archive.com/uclibc@uclibc.org/msg01073.html */
++    /* res = daemon(0, 0); */
++    err = ushare_daemon (0, 0);
+     if (err == -1)
+     {
+       log_error (_("Error: failed to daemonize program : %s\n"),

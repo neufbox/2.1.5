@@ -1,0 +1,26 @@
+diff -pNur linux-2.6.21.7/drivers/leds/Kconfig linux-2.6.21.7/drivers/leds/Kconfig
+--- linux-2.6.21.7/drivers/leds/Kconfig	2008-10-30 10:22:12.000000000 +0100
++++ linux-2.6.21.7/drivers/leds/Kconfig	2008-10-30 10:24:36.000000000 +0100
+@@ -94,6 +94,11 @@ config LEDS_COBALT
+ 	help
+ 	  This option enables support for the front LED on Cobalt Server
+ 
++config LEDS_NEUFBOX
++	tristate "LEDS Support for neufbox platform"
++	help
++	  This option enables support for LED on NeufBox
++
+ comment "LED Triggers"
+ 
+ config LEDS_TRIGGERS
+diff -pNur linux-2.6.21.7/drivers/leds/Makefile linux-2.6.21.7/drivers/leds/Makefile
+--- linux-2.6.21.7/drivers/leds/Makefile	2008-10-30 10:22:12.000000000 +0100
++++ linux-2.6.21.7/drivers/leds/Makefile	2008-10-30 10:23:13.000000000 +0100
+@@ -16,6 +16,7 @@ obj-$(CONFIG_LEDS_NET48XX)		+= leds-net4
+ obj-$(CONFIG_LEDS_WRAP)			+= leds-wrap.o
+ obj-$(CONFIG_LEDS_H1940)		+= leds-h1940.o
+ obj-$(CONFIG_LEDS_COBALT)		+= leds-cobalt.o
++obj-$(CONFIG_LEDS_NEUFBOX)		+= leds-neufbox.o
+ 
+ # LED Triggers
+ obj-$(CONFIG_LEDS_TRIGGER_TIMER)	+= ledtrig-timer.o

@@ -1,0 +1,142 @@
+#
+config NATIVE_TOOLCHAIN
+	bool
+	prompt "Use host's toolchain" if DEVEL && BROKEN
+	default n
+	help
+		If enabled, OpenWrt will compile using your existing toolchain instead of compiling one
+
+menuconfig TOOLCHAINOPTS
+	bool "Toolchain Options" if DEVEL
+#	depends !NATIVE_TOOLCHAIN
+
+menuconfig EXTRA_TARGET_ARCH
+	bool
+	prompt "Enable an extra toolchain target architecture" if TOOLCHAINOPTS
+	default y	if TARGET_ps3
+	default n
+	help
+	  Some builds may require a 'biarch' toolchain. This option
+	  allows you to specify an additional target arch.
+
+	  Most people will answer N here.
+
+	config EXTRA_TARGET_ARCH_NAME
+		string
+		default "powerpc64"	if TARGET_ps3
+		prompt "Extra architecture name" if EXTRA_TARGET_ARCH
+		help
+		  Specify the cpu name (eg powerpc64 or x86_64) of the
+		  additional target architecture.
+
+	config EXTRA_TARGET_ARCH_OPTS
+		string
+		default "-m64"		if TARGET_ps3
+		prompt "Extra architecture compiler options" if EXTRA_TARGET_ARCH
+		help
+		  If you're specifying an addition target architecture,
+		  you'll probably need to also provide options to make
+		  the compiler use this alternate arch.
+
+		  For example, if you're building a compiler that can build
+		  both powerpc and powerpc64 binaries, you'll need to
+		  specify -m64 here.
+
+source "toolchain/binutils/Config.in"
+source "toolchain/gcc/Config.in"
+
+choice
+	prompt "LIBC implementation" if TOOLCHAINOPTS
+	default USE_UCLIBC
+	help
+	  Select the LIBC implementation.
+
+	config USE_EGLIBC
+		bool "Use eglibc"
+		depends !avr32
+		select NO_STRIP
+	
+	config USE_GLIBC
+		bool "Use glibc"
+		depends !avr32
+#		select NO_STRIP
+	
+	config USE_UCLIBC
+		bool "Use uClibc"
+
+endchoice
+
+source "toolchain/eglibc/Config.in"
+source "toolchain/glibc/Config.in"
+source "toolchain/uClibc/Config.in"
+
+config GDB
+	bool
+	prompt "Build gdb" if TOOLCHAINOPTS
+	default n
+	help
+		Enable if you want to build the gdb
+
+config LARGEFILE
+	bool
+	prompt "Enable large file (files > 2 GB) support?" if TOOLCHAINOPTS
+	default y
+	help
+		Enable large file (files > 2 GB) support
+
+config SHADOW_PASSWORDS
+	bool
+	prompt "Enable shadow password support?" if TOOLCHAINOPTS
+	default y
+	help
+		Enable shadow password support.
+
+config SOFT_FLOAT
+	bool
+	prompt "Use software floating point by default" if TOOLCHAINOPTS
+	default y
+	depends on (arm || armeb || powerpc || mips || mips64) && !HAS_FPU
+	help
+	  If your target CPU does not have a Floating Point Unit (FPU) or a
+	  kernel FPU emulator, but you still wish to support floating point
+	  functions, then everything will need to be compiled with soft floating
+	  point support (-msoft-float).
+
+	  Most people will answer N.
+
+config TARGET_OPTIMIZATION
+	string
+	prompt "Target Optimizations" if TOOLCHAINOPTS
+	default DEFAULT_TARGET_OPTIMIZATION
+	help
+	  Optimizations to use when building for the target host.
+
+config USE_UCLIBC
+	bool
+	default y if !TOOLCHAINOPTS
+
+source "toolchain/gcc/Config.version"
+
+source "toolchain/eglibc/Config.version"
+source "toolchain/glibc/Config.version"
+source "toolchain/uClibc/Config.version"
+
+config LIBC
+	string
+	default "eglibc"  if USE_EGLIBC
+	default "glibc"   if USE_GLIBC
+	default "uClibc"  if USE_UCLIBC
+
+config LIBC_VERSION
+	string
+	default EGLIBC_VERSION  if USE_EGLIBC
+	default GLIBC_VERSION   if USE_GLIBC
+	default UCLIBC_VERSION  if USE_UCLIBC
+
+config TARGET_SUFFIX
+	string
+	default "gnueabi"         if (USE_EGLIBC || USE_GLIBC) && EABI_SUPPORT
+	default "gnu"             if (USE_EGLIBC || USE_GLIBC) && !EABI_SUPPORT
+	default "uclibcgnueabi"   if USE_UCLIBC && EABI_SUPPORT
+	default "uclibc"          if USE_UCLIBC && !EABI_SUPPORT
+

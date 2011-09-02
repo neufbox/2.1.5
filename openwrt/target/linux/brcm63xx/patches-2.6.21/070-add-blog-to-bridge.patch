@@ -1,0 +1,106 @@
+diff -pNur linux-2.6.21.7/net/bridge/br_fdb.c linux-2.6.21.7/net/bridge/br_fdb.c
+--- linux-2.6.21.7/net/bridge/br_fdb.c	2007-08-04 18:11:13.000000000 +0200
++++ linux-2.6.21.7/net/bridge/br_fdb.c	2008-11-21 16:33:25.000000000 +0100
+@@ -22,6 +22,10 @@
+ #include <linux/jhash.h>
+ #include <asm/atomic.h>
+ #include "br_private.h"
++#include "br_igmp.h"
++#if defined(CONFIG_MIPS_BRCM)
++#include <linux/blog.h>
++#endif
+ 
+ static struct kmem_cache *br_fdb_cache __read_mostly;
+ static int fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
+@@ -46,7 +50,15 @@ void __exit br_fdb_fini(void)
+  */
+ static __inline__ unsigned long hold_time(const struct net_bridge *br)
+ {
++#if defined(CONFIG_MIPS_BRCM)
++	/* Seems one timer constant in bridge code can serve several different purposes. As we use forward_delay=0,
++	if the code left unchanged, every entry in fdb will expire immidately after a topology change and every packet
++	will flood the local ports for a period of bridge_max_age. This will result in low throughput after boot up. 
++	So we decoulpe this timer from forward_delay. */
++	return br->topology_change ? (15*HZ) : br->ageing_time;
++#else
+ 	return br->topology_change ? br->forward_delay : br->ageing_time;
++#endif
+ }
+ 
+ static __inline__ int has_expired(const struct net_bridge *br,
+@@ -64,6 +76,9 @@ static __inline__ int br_mac_hash(const 
+ static __inline__ void fdb_delete(struct net_bridge_fdb_entry *f)
+ {
+ 	hlist_del_rcu(&f->hlist);
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++	blog_stop(f, NULL);
++#endif
+ 	br_fdb_put(f);
+ }
+ 
+@@ -369,3 +384,13 @@ void br_fdb_update(struct net_bridge *br
+ 		spin_unlock(&br->hash_lock);
+ 	}
+ }
++
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++extern void br_fdb_refresh( struct net_bridge_fdb_entry *fdb );
++void br_fdb_refresh( struct net_bridge_fdb_entry *fdb )
++{
++	fdb->ageing_timer = jiffies;
++	return;
++}
++#endif
++
+diff -aNur linux-2.6.21.7/net/bridge/br_input.c linux-2.6.21.7/net/bridge/br_input.c
+--- linux-2.6.21.7/net/bridge/br_input.c	2009-03-19 13:40:11.000000000 +0100
++++ linux-2.6.21.7/net/bridge/br_input.c	2009-03-19 13:43:30.000000000 +0100
+@@ -17,6 +17,13 @@
+ #include <linux/netdevice.h>
+ #include <linux/etherdevice.h>
+ #include <linux/netfilter_bridge.h>
++#if defined(CONFIG_MIPS_BRCM)
++#include <linux/if_vlan.h>
++#include <linux/timer.h>
++#include <linux/igmp.h>
++#include <linux/ip.h>
++#include <linux/blog.h>
++#endif
+ #include "br_private.h"
+ 
+ /* Bridge group multicast address 802.1d (pg 51). */
+@@ -74,6 +81,9 @@
+ 	}
+ 
+ 	dst = __br_fdb_get(br, dest);
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++	blog_br_fdb(skb, __br_fdb_get(br, eth_hdr(skb)->h_source), dst);
++#endif
+ 	if (dst != NULL && dst->is_local) {
+ 		if (!passedup)
+ 			br_pass_frame_up(br, skb);
+diff -aNur linux-2.6.21.7/net/bridge/br_forward.c linux-2.6.21.7/net/bridge/br_forward.c
+--- linux-2.6.21.7/net/bridge/br_forward.c	2009-03-19 13:32:35.000000000 +0100
++++ linux-2.6.21.7/net/bridge/br_forward.c	2009-03-19 13:36:55.000000000 +0100
+@@ -19,6 +19,9 @@
+ #include <linux/if_vlan.h>
+ #include <linux/netfilter_bridge.h>
+ #include "br_private.h"
++#if defined(CONFIG_MIPS_BRCM)
++#include <linux/blog.h>
++#endif
+ 
+ /* Don't forward packets to originating port or forwarding diasabled */
+ static inline int should_deliver(const struct net_bridge_port *p,
+@@ -113,6 +116,11 @@
+ {
+ 	struct net_bridge_port *p;
+ 	struct net_bridge_port *prev;
++ 
++#if defined(CONFIG_MIPS_BRCM) && defined(CONFIG_BLOG)
++	if ( skb->blog_p )
++		blog_skip(skb);
++#endif
+ 
+ 	if (clone) {
+ 		struct sk_buff *skb2;

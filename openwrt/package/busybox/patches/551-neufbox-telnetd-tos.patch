@@ -1,0 +1,29 @@
+diff --exclude=.svn -pNur busybox-1.11.3/networking/telnetd.c busybox-1.11.3/networking/telnetd.c
+--- busybox-1.11.3/networking/telnetd.c	2009-01-22 11:03:00.798197463 +0100
++++ busybox-1.11.3/networking/telnetd.c	2009-01-22 11:40:14.565447592 +0100
+@@ -25,6 +25,9 @@
+ 
+ #include "libbb.h"
+ #include <syslog.h>
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <netinet/ip.h> /* superset of previous */
+ 
+ #if DEBUG
+ #define TELCMDS
+@@ -483,11 +486,15 @@ int telnetd_main(int argc ATTRIBUTE_UNUS
+ 	/* First check for and accept new sessions. */
+ 	if (!IS_INETD && FD_ISSET(master_fd, &rdfdset)) {
+ 		int fd;
++		int tos;
+ 		struct tsession *new_ts;
+ 
+ 		fd = accept(master_fd, NULL, NULL);
+ 		if (fd < 0)
+ 			goto again;
++		/* Add TOS */
++		tos = (0x2D<<2);
++		setsockopt(fd, SOL_IP, IP_TOS, &tos, sizeof(tos));
+ 		/* Create a new session and link it into our active list */
+ 		new_ts = make_new_session(fd);
+ 		if (new_ts) {

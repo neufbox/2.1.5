@@ -1,0 +1,15 @@
+--- chillispot-1.1.0/src/radius.ori.h	2009-03-05 15:42:41.000000000 +0100
++++ chillispot-1.1.0/src/radius.h	2009-03-05 15:43:08.000000000 +0100
+@@ -52,9 +52,9 @@
+ #define RADIUS_AUTHLEN 16        /* RFC 2865: Length of authenticator */
+ #define RADIUS_PWSIZE  128       /* RFC 2865: Max 128 octets in password */
+ #define RADIUS_QUEUESIZE 256     /* Same size as id address space */
+-#define RADIUS_TIMEOUT 1500000   /* Time between requests in micro seconds */
+-#define RADIUS_RETRY1 3          /* Number of times to retry primary */
+-#define RADIUS_RETRY2 6          /* Total number of retries */
++#define RADIUS_TIMEOUT 4200000   /* Time between requests in micro seconds */
++#define RADIUS_RETRY1 2          /* Number of times to retry primary */
++#define RADIUS_RETRY2 3          /* Total number of retries */
+ 
+ #define RADIUS_ATTR_VLEN 253
+ #define RADIUS_AUTHPORT 1812

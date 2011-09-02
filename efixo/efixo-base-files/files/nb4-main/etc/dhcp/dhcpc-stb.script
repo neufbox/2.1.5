@@ -1,0 +1,104 @@
+#!/bin/sh
+
+SERVICE="tv"
+PIDFILE="/var/run/tvservices-wrapper.pid"
+RESOLV_CONF="/var/ppp/resolv.conf"
+
+[ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
+
+net_setup() {
+
+	status set net_"$SERVICE"_ipaddr $ip
+	status set net_"$SERVICE"_netmask $subnet
+	status set net_"$SERVICE"_broadcast $broadcast
+	status set net_"$SERVICE"_gateway $router
+	status set net_"$SERVICE"_dns "$dns"
+
+	if [ "`status get dhcpc_"$SERVICE"_status`" = "down" ]
+	then
+		logger -s -t dhcp_script -p daemon.debug "["$SERVICE"] DHCP Status changed: [down] -> [up]"
+		status set dhcpc_"$SERVICE"_status up
+		event notify "$SERVICE"-up
+	fi
+
+	[ -e $PIDFILE ] && kill -HUP `cat $PIDFILE`
+
+}
+
+net_setdown() {
+
+	if [ "`status get dhcpc_"$SERVICE"_status`" = "up" ]
+	then
+		logger -s -t dhcp_script -p daemon.debug "["$SERVICE"] DHCP Status changed: [up] -> [down]"
+		status set dhcpc_"$SERVICE"_status down
+
+		status set net_"$SERVICE"_ipaddr ""
+		status set net_"$SERVICE"_netmask ""
+		status set net_"$SERVICE"_broadcast ""
+		status set net_"$SERVICE"_gateway ""
+		status set net_"$SERVICE"_dns ""
+		event notify "$SERVICE"-down
+
+		[ -e $PIDFILE ] && kill -HUP `cat $PIDFILE`
+	fi
+
+}
+
+previous_answer=`status get dhcpc_"$SERVICE"_answer`
+status set net_"$SERVICE"_ifname $interface
+
+if [ "$previous_answer" != "$1" ]
+then
+	logger -s -t dhcp_script -p local1.info "["$SERVICE"] DHCP ANSWER changed [$previous_answer] -> [$1]"
+	logger -s -t dhcp_script -p daemon.debug "["$SERVICE"] DHCP ANSWER changed [$previous_answer] -> [$1]"
+	status set dhcpc_"$SERVICE"_answer $1
+fi
+
+case "$1" in
+
+	deconfig)
+
+		net_setdown
+	;;
+
+	renew)
+
+		if [ ! -n "$router" ]
+		then
+			net_setdown
+			exit 1
+		fi
+
+		net_setup
+
+	;;
+
+	bound)
+
+		if [ ! -n "$router" ]
+		then
+			[ "`status get dhcpc_"$SERVICE"_status`" = "up" ] && net_setdown
+			logger -s -t dhcp_script -p daemon.debug "["$SERVICE"] DHCP ANSWER [$1] ($nisdomain) Error: no router given"
+			exit 1
+		fi
+
+		net_setup
+
+		# This is a kludge to make sure that we will have DNS service even though PPP service is down
+		if [ ! -f $RESOLV_CONF ]
+		then
+			logger -s -t dhcp_script -p daemon.debug "["$SERVICE"] DHCP ANSWER [$1] ($nisdomain) Setting PPP DNS to TV DNS because PPP is down for now"
+			for i in $dns
+			do
+				echo nameserver $i >> $RESOLV_CONF
+			done
+		fi
+	;;
+
+	leasefail|nak)
+
+		net_setdown
+		exit 1
+	;;
+
+esac

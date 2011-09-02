@@ -1,0 +1,152 @@
+#!/bin/sh
+
+SERVICE="ftth"
+RESOLV_CONF="/var/resolv.conf"
+
+[ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
+
+[ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+[ -n "$subnet" ] && NETMASK="netmask $subnet"
+
+wan=$router'/'$subnet
+
+net_setup() {
+
+	status set net_data_ipaddr $ip
+	status set net_data_netmask $subnet
+	status set net_data_broadcast $broadcast
+	status set net_data_gateway $router
+	status set net_data_dns $dns
+	status set net_voip_ifname $interface
+	status set net_voip_ipaddr $ip
+	status set net_voip_netmask $subnet
+	status set net_voip_broadcast $broadcast
+	status set net_voip_gateway $router
+	status set net_voip_dns $dns
+
+	if [ "`status get dhcpc_"$SERVICE"_status`" = "down" ]
+	then
+		logger -s -t dhcp_script -p daemon.debug "["$SERVICE"] DHCP Status changed: [down] -> [up]"
+		status set dhcpc_"$SERVICE"_status up
+
+		# setup filter
+		iptables -A INPUT -i $interface -p icmp -j ICMP_FILTER
+		iptables -A FORWARD -i $interface -m state --state NEW -j WIN_FILTER
+		iptables -A FORWARD -o $interface -m state --state NEW -j WIN_FILTER
+		iptables -A FORWARD -o $interface -p tcp -m tcp --dport 25 -j SMTP_FILTER
+
+		event notify data-up
+		event notify voip-up
+	fi
+
+}
+
+net_setdown() {
+
+	if [ "`status get dhcpc_"$SERVICE"_status`" = "up" ]
+	then
+		logger -s -t dhcp_script -p daemon.debug "["$SERVICE"] DHCP Status changed: [up] -> [down]"
+		status set dhcpc_"$SERVICE"_status down
+
+		# cleanup filter
+		iptables -D INPUT -i $interface -p icmp -j ICMP_FILTER
+		iptables -D FORWARD -i $interface -m state --state NEW -j WIN_FILTER
+		iptables -D FORWARD -o $interface -m state --state NEW -j WIN_FILTER
+		iptables -D FORWARD -o $interface -p tcp -m tcp --dport 25 -j SMTP_FILTER
+
+		status set net_data_ipaddr ""
+		status set net_data_broadcast ""
+		status set net_data_netmask ""
+		status set net_data_gateway ""
+		status set net_data_dns ""
+		status set net_voip_ipaddr ""
+		status set net_voip_broadcast ""
+		status set net_voip_netmask ""
+		status set net_voip_gateway ""
+		status set net_voip_dns ""
+
+		event notify data-down
+		event notify voip-down
+	fi
+
+}
+
+previous_answer=`status get dhcpc_"$SERVICE"_answer`
+
+if [ "$previous_answer" != "$1" ]
+then
+	logger -s -t dhcp_script -p local1.info "["$SERVICE"] DHCP ANSWER changed [$previous_answer] -> [$1]"
+	logger -s -t dhcp_script -p daemon.debug "["$SERVICE"] DHCP ANSWER changed [$previous_answer] -> [$1]"
+	status set dhcpc_"$SERVICE"_answer $1
+fi
+
+case "$1" in
+
+	deconfig)
+
+		rm -f $RESOLV_CONF
+
+		ifconfig $interface 0.0.0.0
+
+		net_setdown
+	;;
+
+	renew)
+
+		ifconfig $interface $ip $BROADCAST $NETMASK
+
+		rm -f $RESOLV_CONF
+		for i in $dns
+		do
+			echo nameserver $i >> $RESOLV_CONF
+		done
+
+		if [ ! -n "$router" ]
+		then
+			logger -s -t dhcp_script -p daemon.debug "[VOIP] DHCP ANSWER [$1] ($nisdomain) Error: no router given"
+			net_setdown
+			exit 1
+		fi
+
+		net_setup
+
+		/etc/init.d/firewall wan
+	;;
+
+	bound)
+
+		ifconfig $interface $ip $BROADCAST $NETMASK
+
+		rm $RESOLV_CONF
+		for i in $dns
+		do
+			echo nameserver $i >> $RESOLV_CONF
+		done
+
+		if [ ! -n "$router" ]
+		then
+			logger -s -t dhcp_script -p daemon.debug "[VOIP] DHCP ANSWER [$1] ($nisdomain) Error: no router given"
+			net_setdown
+			exit 1
+		fi
+
+		/etc/init.d/route dhcp-ack $ip $router $interface
+		/etc/init.d/route ppp-up $ip $router $interface
+		ifconfig $interface:2 172.16.255.254 netmask 255.255.255.252 up
+		ip route add 172.16.255.252/30 dev $interface
+
+		net_setup
+
+		/etc/init.d/firewall wan
+	;;
+
+	leasefail|nak)
+
+		rm -f $RESOLV_CONF
+		ln -s /etc/ppp/resolv.conf $RESOLV_CONF
+
+		net_setdown
+		exit 1
+	;;
+
+esac

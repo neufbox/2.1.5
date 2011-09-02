@@ -1,0 +1,60 @@
+#!/bin/sh
+
+NET_MODE=`nvram get net_mode`
+
+case "$NET_MODE" in
+
+	bridge)
+
+	/etc/init.d/ppp stop
+	/etc/init.d/yaddns stop
+	/etc/init.d/upnp stop
+	/etc/init.d/ushare stop
+	/etc/init.d/dhcpc stop
+	/etc/init.d/wlan stop
+
+	/etc/init.d/wan stop
+	/etc/init.d/lan stop
+
+
+	/etc/init.d/lan start
+	/etc/init.d/wan start
+
+	/etc/init.d/dhcpc start
+# dhcpc script "launch" voip, tv and hotspot
+
+	iptables -R INPUT 8 -i voip0 -m state --state NEW -j LAN_FILTER
+
+
+	exit 1
+
+	;;
+
+	router)
+
+	/etc/init.d/dhcpc stop
+
+
+	/etc/init.d/wan stop
+	/etc/init.d/lan stop
+
+
+	/etc/init.d/lan start
+	/etc/init.d/wan start
+
+	/etc/init.d/dhcpd start
+	/etc/init.d/wanservices start
+	/etc/init.d/ppp start
+	/etc/init.d/dhcpc start
+	/etc/init.d/yaddns start
+	/etc/init.d/upnp start
+	/etc/init.d/ushare start
+	/etc/init.d/wlan start
+# dhcpc script "launch" voip, tv and hotspot
+
+	iptables -R INPUT 8 -i lan0 -m state --state NEW -j LAN_FILTER
+
+	exit 1
+	;;
+
+esac
